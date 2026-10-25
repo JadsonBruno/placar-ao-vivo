@@ -119,7 +119,9 @@ const calib = {
 const porUF = Object.fromEntries(ESTADOS.map((e) => {
   const h = { t2_2014: pt2c(dados[2014][2][e.uf]), t2_2018: pt2c(dados[2018][2][e.uf]), t2_2022: pt2c(dados[2022][2][e.uf]), t1_2026: e.base26 / 100 };
   const xs = Object.values(h).map((x) => 100 * x);
-  return [e.uf, { ...Object.fromEntries(Object.entries(h).map(([k, v]) => [k, +(100 * v).toFixed(2)])), min: +Math.min(...xs).toFixed(2), max: +Math.max(...xs).toFixed(2) }];
+  // por ano: % do PT nos 2 candidatos no 1º e no 2º turno e votos dos 2 candidatos no 2º (testes fora da amostra do motor)
+  const anos = Object.fromEntries(Object.keys(dados).map((a) => [a, { t1: +(100 * pt2c(dados[a][1][e.uf])).toFixed(3), t2: +(100 * pt2c(dados[a][2][e.uf])).toFixed(3), v2: dados[a][2][e.uf].pt + dados[a][2][e.uf].rival }]));
+  return [e.uf, { ...Object.fromEntries(Object.entries(h).map(([k, v]) => [k, +(100 * v).toFixed(2)])), min: +Math.min(...xs).toFixed(2), max: +Math.max(...xs).toFixed(2), anos }];
 }));
 
 const saida = {

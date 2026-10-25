@@ -11,6 +11,13 @@
 //   d = p − base − s − (1−f)·b   e   k = σε² / (σε² + (1−f)^(2γ)·σu²).
 // Ou seja: w(f) = k(f) é o peso da parcial do estado, e ele vai a 1 quando o estado termina (f → 1).
 // A posterior de (s, b) é calculada numa grade; o nacional é uma mistura de normais (sem sorteio, sem ruído de Monte Carlo).
+//
+// Fase 2 (PARAMS2, opcional): F_uf = base + s + c_uf·r_região + ε_uf, com r_região ~ N(0, σr) comum aos estados da
+// região e c_uf = 4·p(1−p) (p = base): um deslocamento em escala logística vale menos ponto perto dos extremos.
+// Com escalaLogit, σε também vira σε·c_uf. Dado (s, b), r é integrado de forma exata, região a região:
+//   precisão = 1/σr² + Σ c²/varD,  média = (Σ c·d/varD)/precisão
+//   F_uf | dados ~ N(base + s + k·d + (1−k)·c·média, σε_uf²(1−k) + ((1−k)·c)²/precisão)
+// e a verossimilhança de (s, b) ganha +½(Σ c·d/varD)²/precisão por região. Com σr = 0 e sem escalaLogit, é o modelo acima.
 
 export const PARAMS = {
   sigmaEps: 0.65, // desvio próprio de cada estado (teste de 2022: erro médio 0,51 → dp ≈ 0,64)
@@ -20,6 +27,9 @@ export const PARAMS = {
   t90: 2.132, // quantil 95% da t(4): converte o intervalo de 90% das pesquisas em escala
   grid: { sHalf: 18, bHalf: 10, coarse: [145, 41], fine: [121, 31] }, // grade adaptativa: grossa para achar a massa, fina só ali
 };
+
+// Fase 2: efeito de região, só com ?motor=2 (não passou em todos os critérios; ver testes/fase2.md e FASE2-PLANO.md).
+export const PARAMS2 = { ...PARAMS, sigmaR: 0.75 }; // σε 0,65 como o atual, em pontos (a escala logística piorou o erro em 2014 e 2018)
 
 const SQRT2PI = Math.sqrt(2 * Math.PI);
 export function normCdf(x) {
@@ -41,9 +51,11 @@ export function projetar(estados, parciais, alvo, P = PARAMS) {
     const has = f > 0 && Number.isFinite(q.p);
     const V = (q.vv || 0) + (1 - f) * e.Vesp; // válidos que o estado terá no fim
     const g2 = Math.pow(1 - f, 2 * P.gamma);
-    const varD = P.sigmaEps ** 2 + g2 * P.sigmaU ** 2;
-    const k = !has ? 0 : P.wFn ? P.wFn(f) : P.sigmaEps ** 2 / varD; // wFn: alternativa só para comparação nos testes
-    return { uf: e.uf, base: e.base, f, p: has ? q.p : null, has, V, varD, k, vv: q.vv || 0, A: q.A || 0, B: q.B || 0 };
+    const c = P.escalaLogit ? (4 * e.base * (100 - e.base)) / 1e4 : 1; // 1 a 50%; menor perto dos extremos
+    const se2 = (P.sigmaEps * (P.escalaLogit ? c : 1)) ** 2;
+    const varD = se2 + g2 * P.sigmaU ** 2;
+    const k = !has ? 0 : P.wFn ? P.wFn(f) : se2 / varD; // wFn: alternativa só para comparação nos testes
+    return { uf: e.uf, base: e.base, reg: P.sigmaR ? e.regiao ?? e.uf : null, c, se2, f, p: has ? q.p : null, has, V, varD, k, vv: q.vv || 0, A: q.A || 0, B: q.B || 0 };
   });
   const Vtot = ufs.reduce((s, x) => s + x.V, 0);
   for (const x of ufs) x.w = x.V / Vtot;
@@ -51,6 +63,17 @@ export function projetar(estados, parciais, alvo, P = PARAMS) {
   const s0 = alvo.centro - baseNat;
   const escala = alvo.meio90 / P.t90;
   const obs = ufs.filter((x) => x.has);
+  // fase 2: regiões (só com σr > 0). prec não depende de (s, b); a média do efeito de região, sim.
+  const regs = [];
+  if (P.sigmaR) {
+    const por = new Map();
+    for (const x of ufs) { if (!por.has(x.reg)) por.set(x.reg, { prec: 1 / P.sigmaR ** 2, obs: [], todos: [] }); const R = por.get(x.reg); R.todos.push(x); if (x.has) { R.obs.push(x); R.prec += (x.c * x.c) / x.varD; } x.R = R; }
+    regs.push(...por.values());
+  }
+  // R.S = soma de c·d/varD da região, dado (s, b); calculada no mesmo laço da verossimilhança
+  const somarReg = (s, b) => { for (const R of regs) R.S = 0; for (const x of obs) if (x.R) x.R.S += (x.c * (x.p - x.base - s - (1 - x.f) * b)) / x.varD; };
+  // variância do nacional que vem da incerteza que sobra em cada efeito de região (igual em todas as células)
+  const vRegNat = regs.reduce((a, R) => { const t = R.todos.reduce((u, x) => u + x.w * (1 - x.k) * x.c, 0); return a + (t * t) / R.prec; }, 0);
 
   // ---- posterior de (s, b): grade grossa para achar onde está a massa, depois grade fina só ali
   // (as duas grades são simétricas em torno de s0 e de b = 0, então a troca de rótulos continua exata)
@@ -64,7 +87,9 @@ export function projetar(estados, parciais, alvo, P = PARAMS) {
       for (let j = 0; j < bN; j++) {
         const b = bLo + ((bHi - bLo) * j) / (bN - 1);
         let ll = lp - (b * b) / (2 * P.sigmaB ** 2);
-        for (const x of obs) { const d = x.p - x.base - s - (1 - x.f) * b; ll -= (d * d) / (2 * x.varD); }
+        if (regs.length) for (const R of regs) R.S = 0;
+        for (const x of obs) { const d = x.p - x.base - s - (1 - x.f) * b; ll -= (d * d) / (2 * x.varD); if (x.R) x.R.S += (x.c * d) / x.varD; }
+        for (const R of regs) ll += (R.S * R.S) / (2 * R.prec);
         out.push([s, b, ll]);
         if (ll > mx) mx = ll;
       }
@@ -88,14 +113,15 @@ export function projetar(estados, parciais, alvo, P = PARAMS) {
   // ---- para cada célula: nacional ~ N(m, v); estados ~ N(mu, var)
   const kMed = ufs.reduce((a, x) => a + x.w * x.k, 0); // quanto o nacional ainda depende de s
   const mix = live.map(([s, b, w]) => {
-    let m = 0, v = 0;
+    let m = 0, v = vRegNat;
+    if (regs.length) { somarReg(s, b); for (const R of regs) R.m = R.S / R.prec; }
     for (const x of ufs) {
       const d = x.has ? x.p - x.base - s - (1 - x.f) * b : 0;
-      const mu = x.base + s + x.k * d;
-      const va = P.sigmaEps ** 2 * (1 - x.k);
+      const mu = x.base + s + x.k * d + (x.R ? (1 - x.k) * x.c * x.R.m : 0);
+      const va = x.se2 * (1 - x.k);
       m += x.w * mu; v += x.w * x.w * va;
     }
-    return { w: w / Z, s, b, m, sd: Math.sqrt(Math.max(v + varPasso * (1 - kMed) ** 2, 1e-12)) };
+    return { w: w / Z, s, b, m, sd: Math.sqrt(Math.max(v + varPasso * (1 - kMed) ** 2, 1e-12)), mr: regs.map((R) => R.m) };
   });
   const cdf = (y) => mix.reduce((acc, c) => acc + c.w * normCdf((y - c.m) / c.sd), 0);
   const quant = (q) => { let lo = 0, hi = 100; for (let it = 0; it < 50; it++) { const mid = (lo + hi) / 2; if (cdf(mid) < q) lo = mid; else hi = mid; } return (lo + hi) / 2; };
@@ -106,10 +132,12 @@ export function projetar(estados, parciais, alvo, P = PARAMS) {
   // estado a estado (média e intervalo aproximado pela variância total)
   const porUF = ufs.map((x) => {
     let m1 = 0, m2 = 0;
+    const iR = x.R ? regs.indexOf(x.R) : -1;
+    const vR = x.R ? ((1 - x.k) * x.c) ** 2 / x.R.prec : 0;
     for (const c of mix) {
       const d = x.has ? x.p - x.base - c.s - (1 - x.f) * c.b : 0;
-      const mu = x.base + c.s + x.k * d;
-      const va = P.sigmaEps ** 2 * (1 - x.k);
+      const mu = x.base + c.s + x.k * d + (iR >= 0 ? (1 - x.k) * x.c * c.mr[iR] : 0);
+      const va = x.se2 * (1 - x.k) + vR;
       m1 += c.w * mu; m2 += c.w * (va + mu * mu);
     }
     const sd = Math.sqrt(Math.max(0, m2 - m1 * m1));

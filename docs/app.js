@@ -1,8 +1,8 @@
 // Placar ao Vivo: busca o TSE direto do navegador; o motor roda num Web Worker (calculo.js),
 // então a tela e os botões respondem na hora, e os números mostram um "esqueleto" enquanto o cálculo não chega.
-import { projetar, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025d";
-import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025d";
-import { apuracao, cenario, CENARIOS, rng } from "./simulado.js?v=20261025d";
+import { projetar, PARAMS, PARAMS2, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025e";
+import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025e";
+import { apuracao, cenario, CENARIOS, rng } from "./simulado.js?v=20261025e";
 
 const $ = (s) => document.querySelector(s);
 const NOME = { A: "Lula", B: "Flávio Bolsonaro" };
@@ -65,17 +65,20 @@ function nacionalAtual(par) {
 }
 
 // ----------------------------------------------------------------------------- cálculo em segundo plano (o pedido mais novo vence)
+// motor 2 (efeito de região, fase 2): ?motor=2 liga, ?motor=1 desliga; sem parâmetro vale MOTOR_PADRAO
+const MOTOR_PADRAO = 1;
+const MOTOR = { 1: 1, 2: 2 }[new URLSearchParams(location.search).get("motor")] ?? MOTOR_PADRAO;
 let worker = null;
-try { worker = new Worker(new URL("./calculo.js?v=20261025d", import.meta.url), { type: "module" }); } catch { worker = null; }
+try { worker = new Worker(new URL("./calculo.js?v=20261025e", import.meta.url), { type: "module" }); } catch { worker = null; }
 let pedidoId = 0, emCurso = null, fila = null, ultimo = null;
 function montarPedido() {
   const par = parciais(), nat = nacionalAtual(par);
   const temEstado = Object.values(par).some((q) => q.f > 0);
   const id = ++pedidoId;
-  if (temEstado || !manual.BR) return { msg: { id, estados: ESTADOS.map((e) => ({ uf: e.uf, base: e.base, Vesp: e.Vesp })), parciais: par, alvo: alvo() }, par, nat };
+  if (temEstado || !manual.BR) return { msg: { id, estados: ESTADOS.map((e) => ({ uf: e.uf, regiao: e.regiao, base: e.base, Vesp: e.Vesp })), parciais: par, alvo: alvo(), motor: MOTOR }, par, nat };
   // só o nacional digitado: o país inteiro vira um "estado" (menos preciso)
   const Vt = ESTADOS.reduce((s, e) => s + e.Vesp, 0), baseNat = ESTADOS.reduce((s, e) => s + e.base * e.Vesp, 0) / Vt;
-  return { msg: { id, estados: [{ uf: "BR", base: baseNat, Vesp: Vt }], parciais: par, nacionalSo: { BR: { f: nat.f, p: nat.p, vv: nat.A + nat.B, A: nat.A, B: nat.B } }, alvo: alvo() }, par, nat };
+  return { msg: { id, estados: [{ uf: "BR", base: baseNat, Vesp: Vt }], parciais: par, nacionalSo: { BR: { f: nat.f, p: nat.p, vv: nat.A + nat.B, A: nat.A, B: nat.B } }, alvo: alvo(), motor: MOTOR }, par, nat };
 }
 function calcular() {
   const ped = montarPedido();
@@ -88,7 +91,7 @@ function enviar(ped) {
   $("#calc").classList.add("on");
   if (worker) worker.postMessage(ped.msg);
   else setTimeout(() => { // navegador sem Worker de módulo: calcula aqui mesmo, sem travar o toque que pediu
-    const m = ped.msg; const r = projetar(m.estados, m.nacionalSo || m.parciais, m.alvo);
+    const m = ped.msg; const r = projetar(m.estados, m.nacionalSo || m.parciais, m.alvo, m.motor === 2 ? PARAMS2 : PARAMS);
     receber({ id: m.id, r, def: definido(m.parciais) });
   }, 30);
 }
@@ -298,7 +301,7 @@ let simTimer = 0, simCen = null, HIST = null;
 async function simular() {
   modo = "sim"; clearTimeout(timer); clearTimeout(simTimer);
   hist = []; marcarEsqueleto(true);
-  HIST ??= await (await fetch("historico.json?v=20261025d")).json();
+  HIST ??= await (await fetch("historico.json?v=20261025e")).json();
   const R = rng(Date.now() % 100000);
   // resultado final por estado: regiões, abstenção e limites históricos (simulado.js); a apuração anda por cima dele
   simCen = cenario(ESTADOS, HIST, R, { centro: alvo().centro, id: $("#cenario").value });
@@ -368,12 +371,12 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && mo
 
 // ----------------------------------------------------------------------------- início
 (async function inicio() {
-  const est = await (await fetch("estados.json?v=20261025d", { cache: "no-cache" })).json();
+  const est = await (await fetch("estados.json?v=20261025e", { cache: "no-cache" })).json();
   ESTADOS = est.map((r) => ({ uf: r.uf, regiao: r.regiao, base: r.base26, Vesp: r.validos26_2t_esp, ap1752: r.apurado_17h52_1t26, secoes: r.validos26_2t_esp }));
   montarControles();
   marcarEsqueleto(true);
   try { const el = await descobrirEleicao(); cd = el.cd; } catch { /* fica com 6258, confirmado em 24/10 */ }
   hist = store.get("pv-hist-" + cd, []);
-  $("#versao").textContent = `Eleição TSE ${cd}. Página estática: o seu navegador consulta o TSE diretamente; o cálculo roda em segundo plano.`;
+  $("#versao").textContent = `Eleição TSE ${cd}. Página estática: o seu navegador consulta o TSE diretamente; o cálculo roda em segundo plano. Motor ${MOTOR}${MOTOR === 2 ? " (com efeito de região)" : ""}.`;
   if (new URLSearchParams(location.search).has("simulado")) simular(); else aoVivo();
 })();

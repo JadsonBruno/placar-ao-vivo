@@ -106,3 +106,4 @@ input,select{font:inherit;font-size:16px;background:#0b1224;color:var(--text);bo
 @media (max-width:420px){.cand .big{font-size:30px}.manual{grid-template-columns:1fr 1fr}.favtxt{font-size:19px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 .cen{display:grid;gap:4px;font-size:13px;color:var(--muted);margin:8px 0}
+@media (max-width:560px){.favtxt{min-height:2.4em}}
