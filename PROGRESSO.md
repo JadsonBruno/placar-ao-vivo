@@ -91,3 +91,9 @@ Prazo: tudo testado antes das 17h (Brasília) de 25/10. A votação vai das 8h �
   - `node testes/rodada2.mjs` (cerca de 7 min);
   - `MOTOR=2 node testes/validacao.mjs`;
   - `REPS=60 REPS_SIM=1 VARIANTE='{...}' node testes/rodada2.mjs` para testar peças isoladas.
+
+## 25/10, ~15h40 (Brasília): motor 2 é o padrão
+- Teste com a apuração REAL de 2022, reconstruída do boletim de urna (`scripts/montar-parciais-bu.mjs`, `testes/parciais-reais.mjs`).
+- Motor 2 ganhou: exterior isolado (apura por fuso) e ruído de parcial com poucos votos (σsec 80, expoente 2), calibrados no 1º turno de 2022 (`testes/calibrar-ruido.mjs`) e testados no 2º.
+- 2º turno de 2022, previsão de partida 52: erro médio 0,46 (motor 1) → 0,23; maior erro antes de 30% apurado 3,6 → 1,1.
+- `?motor=1` volta ao motor anterior.

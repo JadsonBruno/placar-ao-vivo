@@ -36,7 +36,8 @@ for (const [X, p] of [[15.34, 48.32], [50.9, 49.7], [67.76, 50.01], [98.91, 50.8
 }
 
 const SEC = { ...(process.env.SEC ? { sigmaSec: Number(process.env.SEC) } : {}), ...(process.env.ZZ ? { zzFator: Number(process.env.ZZ) } : {}) };
-const MOT = { "motor 1": { ...PARAMS, ...SEC }, "motor 2": { ...PARAMS_M2, ...SEC } };
+const VAR2 = process.env.VARIANTE ? JSON.parse(process.env.VARIANTE) : {};
+const MOT = { "motor 1": { ...PARAMS, ...SEC }, "motor 2": { ...PARAMS_M2, ...SEC, ...VAR2 } };
 for (const centro of (process.env.CENTROS || "52.0,50.9,49.0").split(",").map(Number)) {
   const alvo = { centro, meio90: 4.55 };
   log("");

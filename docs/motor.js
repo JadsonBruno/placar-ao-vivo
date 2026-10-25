@@ -54,10 +54,11 @@ export function projetar(estados, parciais, alvo, P = PARAMS) {
     const g2 = Math.pow(1 - f, 2 * P.gamma);
     const c = P.escalaLogit ? (4 * e.base * (100 - e.base)) / 1e4 : 1; // 1 a 50%; menor perto dos extremos
     const se2 = (P.sigmaEps * (P.escalaLogit ? c : 1)) ** 2;
-    // P.sigmaSec (opcional): parcial com poucos votos é ruidosa (poucas seções); variância ≈ σsec²·250/votos
+    // P.sigmaSec, P.expSec (opcionais): parcial com poucos votos é ruidosa; variância extra σsec²·(250/votos)^expSec.
+    // Calibrado no 1º turno de 2022 (testes/calibrar-ruido.mjs): σsec 80, expoente 2 (poucas seções erram desproporcionalmente)
     // P.zzFator (opcional): o exterior apura por fuso (Ásia e Europa antes da América), então a parcial dele erra mais
     const sU = P.sigmaU * (P.zzFator && e.uf === "ZZ" ? P.zzFator : 1);
-    const varD = se2 + g2 * sU ** 2 + (P.sigmaSec && has ? (P.sigmaSec ** 2 * 250) / Math.max(q.vv || 0, 1) : 0);
+    const varD = se2 + g2 * sU ** 2 + (P.sigmaSec && has ? P.sigmaSec ** 2 * Math.pow(250 / Math.max(q.vv || 0, 1), P.expSec ?? 1) : 0);
     const k = !has ? 0 : P.wFn ? P.wFn(f) : se2 / varD; // wFn: alternativa só para comparação nos testes
     return { uf: e.uf, base: e.base, reg: P.sigmaR ? e.regiao ?? e.uf : null, c, se2, f, p: has ? q.p : null, has, V, varD, k, vv: q.vv || 0, A: q.A || 0, B: q.B || 0 };
   });
@@ -168,6 +169,8 @@ export function projetar(estados, parciais, alvo, P = PARAMS) {
 export const PARAMS_M2 = {
   // τ e a mistura 50/50 ficam desligados: pioraram 2014 e 2018 no teste peça por peça (testes/rodada2.md)
   ...PARAMS, versao: 2, sigmaT: 0, misturaOutros: false, sigmaRs: [0, 0.75, 1.5], encolheComp: 0.3,
+  // exterior isolado e ruído de parcial com poucos votos: calibrados no 1º turno de 2022, testados no 2º (testes/parciais-reais.md)
+  isolados: ["ZZ"], sigmaSec: 80, expSec: 2,
   grid: { sHalf: 18, bHalf: 10, coarse: [73, 21], fine: [91, 25] },
 };
 
@@ -191,11 +194,14 @@ export function projetar2(estados, parciais, alvo, P = PARAMS_M2) {
     const has = f > 0 && Number.isFinite(q.p);
     const reg = e.regiao ?? e.uf;
     const V = (q.vv || 0) + (1 - f) * e.Vesp * (rho[reg] ?? 1);
-    const sU = P.sigmaU * (P.zzFator && e.uf === "ZZ" ? P.zzFator : 1);
-    const varD = P.sigmaEps ** 2 + Math.pow(1 - f, 2 * P.gamma) * sU ** 2 + (P.sigmaSec && has ? (P.sigmaSec ** 2 * 250) / Math.max(q.vv || 0, 1) : 0);
+    // P.isolados (ex.: ["ZZ"]): a parcial só projeta o próprio lugar; não entra no ajuste nacional, no viés de ordem nem nas
+    // regiões. O exterior apura por fuso (Ásia e Europa antes da América), uma ordem que nada diz sobre o Brasil.
+    const iso = !!P.isolados?.includes(e.uf);
+    const sU = P.sigmaU * ((P.zzFator && e.uf === "ZZ") || iso ? P.zzFator ?? 3 : 1);
+    const varD = P.sigmaEps ** 2 + Math.pow(1 - f, 2 * P.gamma) * sU ** 2 + (P.sigmaSec && has ? P.sigmaSec ** 2 * Math.pow(250 / Math.max(q.vv || 0, 1), P.expSec ?? 1) : 0);
     const k = has ? P.sigmaEps ** 2 / varD : 0;
     const o = comO ? e.outros : 0;
-    return { uf: e.uf, reg, base: P.misturaOutros === false ? e.base : e.base * (1 - o) + 50 * o, o, f, p: has ? q.p : null, has, V, varD, k, c: 1 };
+    return { iso, uf: e.uf, reg, base: P.misturaOutros === false ? e.base : e.base * (1 - o) + 50 * o, o, f, p: has ? q.p : null, has, V, varD, k, c: 1 };
   });
   const Vtot = ufs.reduce((s, x) => s + x.V, 0);
   for (const x of ufs) x.w = x.V / Vtot;
@@ -205,7 +211,7 @@ export function projetar2(estados, parciais, alvo, P = PARAMS_M2) {
   const baseNat = ufs.reduce((s, x) => s + x.w * x.base, 0);
   const s0 = alvo.centro - baseNat;
   const escala = alvo.meio90 / P.t90;
-  const obs = ufs.filter((x) => x.has);
+  const obs = ufs.filter((x) => x.has && !x.iso);
   const nomesReg = [...new Set(ufs.map((x) => x.reg))];
   const iReg = Object.fromEntries(nomesReg.map((r, i) => [r, i]));
   for (const x of ufs) x.ir = iReg[x.reg];
@@ -281,7 +287,7 @@ export function projetar2(estados, parciais, alvo, P = PARAMS_M2) {
   const live = [];
   for (const c of cells) { const w = Math.exp(c.ll - maxL); if (w > 1e-10) { c.w = w; live.push(c); Z += w; } }
   const kMed = ufs.reduce((a, x) => a + x.w * x.k, 0);
-  const muUF = (x, c) => { const d = x.has ? x.p - x.base - c.s - (1 - x.f) * c.b : 0; return x.base + c.s + x.k * d + (1 - x.k) * (x.a * c.mT + c.mR[x.ir]); };
+  const muUF = (x, c) => { const d = x.has ? x.p - x.base - c.s - (x.iso ? 0 : (1 - x.f) * c.b) : 0; return x.base + c.s + x.k * d + (1 - x.k) * (x.a * c.mT + c.mR[x.ir]); };
   const mix = live.map((c) => {
     let m = 0, v = H[c.hi].vNat;
     for (const x of ufs) { m += x.w * muUF(x, c); v += x.w * x.w * P.sigmaEps ** 2 * (1 - x.k); }
