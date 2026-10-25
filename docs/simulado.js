@@ -22,6 +22,70 @@ export function rng(seed = 1) {
   return { u, n: () => Math.sqrt(-2 * Math.log(u() + 1e-12)) * Math.cos(2 * Math.PI * u()) };
 }
 
+// ----------------------------------------------------------------------------- cenários de resultado final
+// Cada cenário tem um espelho (o mesmo efeito a favor do outro candidato, ou a região oposta) e os dois têm a
+// mesma chance de sair no "aleatório"; "Sem surpresa" e "Empate" são espelhos de si mesmos.
+// regiao: deslocamento extra em logit (+ = Lula); validos: variação extra dos votos válidos da região (− = mais abstenção).
+// 0,12 em logit é o tamanho dos deslocamentos regionais de 2014 e 2018; 3% de válidos é próximo do maior visto (Norte, 2014 e 2018).
+export const CENARIOS = [
+  { id: "normal", nome: "Sem surpresa" },
+  { id: "empate", nome: "Empate técnico", empate: true },
+  { id: "abstSul", par: "abstNE", nome: "Mais abstenção no Sul, menos no Nordeste", validos: { Sul: -0.03, Nordeste: 0.03 } },
+  { id: "abstNE", par: "abstSul", nome: "Mais abstenção no Nordeste, menos no Sul", validos: { Nordeste: -0.03, Sul: 0.03 } },
+  { id: "pesqA", par: "pesqB", nome: "Pesquisas subestimam Lula em 3 pontos", erro: 3 },
+  { id: "pesqB", par: "pesqA", nome: "Pesquisas subestimam Flávio em 3 pontos", erro: -3 },
+  { id: "neA", par: "neB", nome: "Nordeste vai mais para Lula do que no 1º turno", regiao: { Nordeste: 0.12 } },
+  { id: "neB", par: "neA", nome: "Nordeste vai mais para Flávio do que no 1º turno", regiao: { Nordeste: -0.12 } },
+  { id: "seA", par: "seB", nome: "Sudeste vai mais para Lula do que no 1º turno", regiao: { Sudeste: 0.12 } },
+  { id: "seB", par: "seA", nome: "Sudeste vai mais para Flávio do que no 1º turno", regiao: { Sudeste: -0.12 } },
+];
+export const MARGEM_LIMITE = 5; // pontos além do mínimo e do máximo históricos de cada estado
+
+const logit = (p) => Math.log(p / (1 - p));
+const expit = (x) => 1 / (1 + Math.exp(-x));
+
+// Sorteia o resultado final de cada estado num cenário.
+// estados: [{ uf, regiao, base (% de Lula nos 2 candidatos, 1º turno de 2026), Vesp }]
+// hist: dados/historico.json (calibragem e limites); centro: % nacional de Lula na previsão escolhida
+// Passos: (1) alvo nacional = previsão + erro das pesquisas (±1,5); (2) desvios de região e de estado, em logit e nos
+// válidos, do tamanho medido no TSE; (3) um deslocamento nacional único, achado para bater o alvo; (4) o efeito do
+// cenário por cima (ele move o nacional); (5) estado fora dos limites históricos ± 5 pontos tem o desvio sorteado de novo.
+export function cenario(estados, hist, R, { centro, id = "aleatorio" }) {
+  const C = id === "aleatorio" ? CENARIOS[Math.floor(R.u() * CENARIOS.length)] : CENARIOS.find((c) => c.id === id);
+  const { sigRegiao, sigEstado, sigRegiaoValidos, sigEstadoValidos } = hist.calib;
+  const alvo = C.empate ? 50 + R.n() * 0.3 : centro + (C.erro ?? 0) + R.n() * 1.5;
+  const regioes = [...new Set(estados.map((e) => e.regiao))];
+  const dReg = Object.fromEntries(regioes.map((r) => [r, R.n() * sigRegiao]));
+  const tReg = Object.fromEntries(regioes.map((r) => [r, R.n() * sigRegiaoValidos]));
+  const dUF = {}, V = {};
+  for (const e of estados) { dUF[e.uf] = R.n() * sigEstado; V[e.uf] = Math.round(e.Vesp * Math.exp(tReg[e.regiao] + R.n() * sigEstadoValidos)); }
+  const lim = Object.fromEntries(estados.map((e) => { const h = hist.porUF[e.uf]; return [e.uf, [Math.max(0.5, h.min - MARGEM_LIMITE), Math.min(99.5, h.max + MARGEM_LIMITE)]]; }));
+  const xBase = (e) => logit(e.base / 100) + dReg[e.regiao] + dUF[e.uf];
+  const nac = (c) => { let a = 0, v = 0; for (const e of estados) { a += V[e.uf] * expit(xBase(e) + c); v += V[e.uf]; } return (100 * a) / v; };
+  let final = {}, resorteios = 0, cortados = 0;
+  for (let volta = 0; ; volta++) {
+    let lo = -4, hi = 4;
+    for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (nac(m) < alvo) lo = m; else hi = m; }
+    const c = (lo + hi) / 2;
+    const Vf = {};
+    for (const e of estados) {
+      final[e.uf] = 100 * expit(xBase(e) + c + (C.regiao?.[e.regiao] ?? 0));
+      Vf[e.uf] = Math.round(V[e.uf] * (1 + (C.validos?.[e.regiao] ?? 0)));
+    }
+    const fora = estados.filter((e) => final[e.uf] < lim[e.uf][0] || final[e.uf] > lim[e.uf][1]);
+    if (!fora.length || volta === 30) {
+      // se o alvo pedido é extremo demais para o histórico, o que sobrar é cortado no limite (e contado)
+      for (const e of fora) { final[e.uf] = Math.min(lim[e.uf][1], Math.max(lim[e.uf][0], final[e.uf])); cortados++; }
+      Object.assign(V, Vf);
+      break;
+    }
+    for (const e of fora) { dUF[e.uf] = R.n() * sigEstado; resorteios++; }
+  }
+  const W = estados.reduce((s, e) => s + V[e.uf], 0);
+  const nacional = estados.reduce((s, e) => s + V[e.uf] * final[e.uf], 0) / W;
+  return { id: C.id, nome: C.nome, alvo, nacional, final, V, lim, resorteios, cortados };
+}
+
 // estados: [{ uf, apurado1752 (%), V (válidos que terá), final (% de A), u (ruído da parcial do estado) }]
 // b: viés comum de ordem; gamma: como o ruído cai com f
 export function apuracao(estados, { b = 0, gamma = 0.8, apuradoNacional1752 = 9.08 } = {}) {

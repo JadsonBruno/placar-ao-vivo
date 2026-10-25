@@ -69,6 +69,35 @@ Comparação de `w(f)` na parcial das 17h52 (prior = 1º turno de 2022 + ajuste)
 - **6.4 2º turno de 2022 na checagem simples:** a faixa entre as duas curvas contém 50,90 nas 4 parciais. A curva de 2022 acerta 2022 por construção.
 - **6.5 Simetria:** trocar os rótulos espelha as saídas, com diferença máxima de 3e-13.
 
+## Simulador de cenários (`node testes/simulador.mjs`; detalhes em `testes/simulador.md`)
+
+A demonstração sorteia o resultado final de cada estado com `cenario()` em `src/simulado.mjs`.
+
+**Dados.** `scripts/montar-historico.mjs` lê os dados abertos do TSE de 2014, 2018 e 2022 e grava `dados/historico.json`. Os totais nacionais do PT e do adversário conferem nos 6 turnos.
+
+**Como cada resultado é sorteado:**
+- **Ponto de partida:** o 1º turno de 2026 do estado, em escala logit.
+- **Desvios de região e de estado:** medidos na passagem do 1º para o 2º turno de 2014, 2018 e 2022.
+  - Como medir: por ponto de voto em "outros candidatos" do 1º turno, reescalado para os 7,8% de 2026.
+  - Tamanho: 0,039 por região e 0,040 por estado, em logit.
+- **Abstenção por região e por estado:** ±2,4% e ±1,5% nos votos válidos.
+- **Nacional:** um deslocamento único faz o país bater a previsão escolhida (±1,5 pontos de erro das pesquisas).
+- **Limites:** nenhum estado sai da faixa histórica do PT (2º turnos de 2014, 2018 e 2022 e 1º turno de 2026), com 5 pontos de folga para cada lado. Quem sai é sorteado de novo.
+
+**Cenários.** Há 10, e cada um que favorece um lado tem o seu espelho:
+- sem surpresa;
+- empate;
+- abstenção no Sul × no Nordeste;
+- pesquisas subestimam um ou outro;
+- Nordeste ou Sudeste se movem para um ou outro.
+
+O "aleatório" sorteia entre eles com a mesma chance. Com previsão de empate, a média dá 50,00% e Lula vence 50,2% das vezes.
+
+**Medição do motor (sem alterá-lo).**
+- **Cobertura geral:** nas apurações desse simulador, a faixa de 80% do motor contém o resultado sorteado 59% das vezes, e a de 95%, 77%.
+- **Onde ela mais erra:** nos cenários de deslocamento regional (Sudeste: 35%).
+- **Por quê:** o motor supõe que os estados se movem juntos, com ±0,65 ponto, enquanto o histórico mostra regiões se movendo em bloco. Ajustar isso é a fase 2.
+
 ## Estrutura
 
 - `docs/`: a página publicada (GitHub Pages). Gere de novo com `node scripts/montar-web.mjs`; teste localmente com `node scripts/servir-web.mjs` e abra http://localhost:8090.
