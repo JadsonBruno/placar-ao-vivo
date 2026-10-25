@@ -57,3 +57,14 @@ próprio navegador. Não precisa de servidor.
    o TSE de verdade (os arquivos do 6258 já existem, zerados).
 
 Prazo: tudo testado antes das 17h (Brasília) de 25/10. A votação vai das 8h às 17h.
+
+## Atualização 25/10, ~00h15
+- FEITO: itens 1, 2 e 5. Validação toda verde (σb = 2). Página em `docs/` (era `web/`), testada no navegador a 375 px
+  com o TSE de verdade (busca funcionando) e no modo `?simulado=1`. README escrito. Commit local `5b79c25` (git no WSL).
+- Publicação: o `git push` pelo Windows não tem credencial (abre uma janela de login). O `gh` do WSL está logado como
+  JadsonBruno (`wsl -e bash -lc "gh auth status"`). O plano agora é um repositório próprio, público,
+  `JadsonBruno/placar-ao-vivo`, com Pages em main:/docs → https://jadsonbruno.github.io/placar-ao-vivo/.
+  A criação do repositório público foi BLOQUEADA pela permissão automática: **o usuário precisa autorizar**.
+  Comando pronto (rodar no WSL, na pasta do projeto):
+  `gh repo create JadsonBruno/placar-ao-vivo --public --source . --push && gh api -X POST repos/JadsonBruno/placar-ao-vivo/pages -f 'source[branch]=main' -f 'source[path]=/docs'`
+- Falta: publicar (depois da autorização); item 4 (servidor local), que é opcional porque a página já faz tudo no navegador.
