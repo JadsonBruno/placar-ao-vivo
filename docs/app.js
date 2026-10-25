@@ -1,8 +1,8 @@
 // Placar ao Vivo: busca o TSE direto do navegador; o motor roda num Web Worker (calculo.js),
 // então a tela e os botões respondem na hora, e os números mostram um "esqueleto" enquanto o cálculo não chega.
-import { projetar, PARAMS, PARAMS_M2, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025i";
-import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025i";
-import { apuracao, cenario, CENARIOS, rng } from "./simulado.js?v=20261025i";
+import { projetar, PARAMS, PARAMS_M2, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025j";
+import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025j";
+import { apuracao, cenario, CENARIOS, rng } from "./simulado.js?v=20261025j";
 
 const $ = (s) => document.querySelector(s);
 const NOME = { A: "Lula", B: "Flávio Bolsonaro" };
@@ -71,10 +71,10 @@ function nacionalAtual(par) {
 
 // ----------------------------------------------------------------------------- cálculo em segundo plano (o pedido mais novo vence)
 // motor 2 (efeito de região, fase 2): ?motor=2 liga, ?motor=1 desliga; sem parâmetro vale MOTOR_PADRAO
-const MOTOR_PADRAO = 1;
+const MOTOR_PADRAO = 2;
 const MOTOR = { 1: 1, 2: 2 }[new URLSearchParams(location.search).get("motor")] ?? MOTOR_PADRAO;
 let worker = null;
-try { worker = new Worker(new URL("./calculo.js?v=20261025i", import.meta.url), { type: "module" }); } catch { worker = null; }
+try { worker = new Worker(new URL("./calculo.js?v=20261025j", import.meta.url), { type: "module" }); } catch { worker = null; }
 let pedidoId = 0, emCurso = null, fila = null, ultimo = null;
 function montarPedido() {
   const par = parciais(), nat = nacionalAtual(par);
@@ -307,7 +307,7 @@ let simTimer = 0, simCen = null, HIST = null;
 async function simular() {
   modo = "sim"; clearTimeout(timer); clearTimeout(simTimer);
   hist = []; marcarEsqueleto(true);
-  HIST ??= await (await fetch("historico.json?v=20261025i")).json();
+  HIST ??= await (await fetch("historico.json?v=20261025j")).json();
   const R = rng(Date.now() % 100000);
   // resultado final por estado: regiões, abstenção e limites históricos (simulado.js); a apuração anda por cima dele
   simCen = cenario(ESTADOS, HIST, R, { centro: alvo().centro, id: $("#cenario").value });
@@ -377,7 +377,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && mo
 
 // ----------------------------------------------------------------------------- início
 (async function inicio() {
-  const est = await (await fetch("estados.json?v=20261025i", { cache: "no-cache" })).json();
+  const est = await (await fetch("estados.json?v=20261025j", { cache: "no-cache" })).json();
   ESTADOS = est.map((r) => ({ uf: r.uf, regiao: r.regiao, outros: 1 - (r.lula26_1t + r.flavio26_1t) / r.validos26_1t, base: r.base26, Vesp: r.validos26_2t_esp, ap1752: r.apurado_17h52_1t26, secoes: r.validos26_2t_esp }));
   montarControles();
   marcarEsqueleto(true);

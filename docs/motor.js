@@ -54,7 +54,10 @@ export function projetar(estados, parciais, alvo, P = PARAMS) {
     const g2 = Math.pow(1 - f, 2 * P.gamma);
     const c = P.escalaLogit ? (4 * e.base * (100 - e.base)) / 1e4 : 1; // 1 a 50%; menor perto dos extremos
     const se2 = (P.sigmaEps * (P.escalaLogit ? c : 1)) ** 2;
-    const varD = se2 + g2 * P.sigmaU ** 2;
+    // P.sigmaSec (opcional): parcial com poucos votos é ruidosa (poucas seções); variância ≈ σsec²·250/votos
+    // P.zzFator (opcional): o exterior apura por fuso (Ásia e Europa antes da América), então a parcial dele erra mais
+    const sU = P.sigmaU * (P.zzFator && e.uf === "ZZ" ? P.zzFator : 1);
+    const varD = se2 + g2 * sU ** 2 + (P.sigmaSec && has ? (P.sigmaSec ** 2 * 250) / Math.max(q.vv || 0, 1) : 0);
     const k = !has ? 0 : P.wFn ? P.wFn(f) : se2 / varD; // wFn: alternativa só para comparação nos testes
     return { uf: e.uf, base: e.base, reg: P.sigmaR ? e.regiao ?? e.uf : null, c, se2, f, p: has ? q.p : null, has, V, varD, k, vv: q.vv || 0, A: q.A || 0, B: q.B || 0 };
   });
@@ -188,7 +191,8 @@ export function projetar2(estados, parciais, alvo, P = PARAMS_M2) {
     const has = f > 0 && Number.isFinite(q.p);
     const reg = e.regiao ?? e.uf;
     const V = (q.vv || 0) + (1 - f) * e.Vesp * (rho[reg] ?? 1);
-    const varD = P.sigmaEps ** 2 + Math.pow(1 - f, 2 * P.gamma) * P.sigmaU ** 2;
+    const sU = P.sigmaU * (P.zzFator && e.uf === "ZZ" ? P.zzFator : 1);
+    const varD = P.sigmaEps ** 2 + Math.pow(1 - f, 2 * P.gamma) * sU ** 2 + (P.sigmaSec && has ? (P.sigmaSec ** 2 * 250) / Math.max(q.vv || 0, 1) : 0);
     const k = has ? P.sigmaEps ** 2 / varD : 0;
     const o = comO ? e.outros : 0;
     return { uf: e.uf, reg, base: P.misturaOutros === false ? e.base : e.base * (1 - o) + 50 * o, o, f, p: has ? q.p : null, has, V, varD, k, c: 1 };
