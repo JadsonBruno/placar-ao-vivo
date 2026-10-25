@@ -68,3 +68,11 @@ Prazo: tudo testado antes das 17h (Brasília) de 25/10. A votação vai das 8h �
   Comando pronto (rodar no WSL, na pasta do projeto):
   `gh repo create JadsonBruno/placar-ao-vivo --public --source . --push && gh api -X POST repos/JadsonBruno/placar-ao-vivo/pages -f 'source[branch]=main' -f 'source[path]=/docs'`
 - Falta: publicar (depois da autorização); item 4 (servidor local), que é opcional porque a página já faz tudo no navegador.
+
+## Atualização 25/10, ~05h15
+- PUBLICADO com autorização do usuário: repositório público https://github.com/JadsonBruno/placar-ao-vivo, com Pages
+  em main:/docs → **https://jadsonbruno.github.io/placar-ao-vivo/**. Conferido em 375 px: busca o TSE a partir do
+  github.io, descobre sozinha a eleição 6258 e mostra 37,4% × 62,6% antes da apuração (versão B).
+- A retomada automática rodou às 00h22 e não mudou nada.
+- Para atualizar a página: editar src/ ou docs/, rodar `node scripts/montar-web.mjs` e, no WSL, `git commit` + `git push`.
+- Opcional, não feito: servidor local gravador (item 4).
