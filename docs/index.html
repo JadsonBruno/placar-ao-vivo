@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="estilo.css">
 </head>
 <body>
-<header class="top">
+<header class="top" id="topo">
   <div>
     <h1>Placar ao Vivo</h1>
     <p class="sub">2º turno presidencial · 25/10/2026 · projeção por estado</p>
@@ -21,11 +21,12 @@
     <div class="row between"><span id="statusTxt">Conectando ao TSE…</span><span class="muted" id="hora"></span></div>
     <div class="bar" aria-hidden="true"><i id="barra"></i></div>
     <div class="row between muted small"><span id="secoes">— seções totalizadas</span><span id="fonteTxt"></span></div>
+    <p class="calc small" id="calc" hidden><i></i>calculando a projeção…</p>
   </section>
 
   <section class="card fav" id="fav">
     <p class="muted small">Quem está mais favorecido agora</p>
-    <p class="favtxt" id="favTxt">—</p>
+    <p class="favtxt sk" id="favTxt">—</p>
     <div class="pbar" aria-hidden="true"><i class="ca" id="pA"></i><i class="cb" id="pB"></i></div>
     <p class="muted small" id="favNota">Faixas de exibição: indefinido 45–55%, levemente favorável 55–70%, favorável 70–90%, muito favorável 90–99% (convenção, não regra estatística).</p>
   </section>

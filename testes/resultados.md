@@ -12,7 +12,7 @@ No teste do 1º turno uso σε = 2.12 (o erro desse prior é maior que o do 2º 
 ## 6.2 Por estado: parciais estaduais das 17h52 do 1º turno de 2026
 Parcial por estado reconstruída do Mix Vale (o artigo dá só o % do líder; o % do outro é estimado supondo que os demais candidatos tinham na parcial a mesma fatia do final — ver README).
 - modelo (k calibrado): erro médio por estado 1.92 pt; o final real cai no intervalo de 80% em 19/28 (67.9%) e no de 95% em 27/28 (96.4%); nacional 50.54 [47.87–53.24], real 48.99
-- w(f) = f: erro médio por estado 2.02 pt; o final real cai no intervalo de 80% em 18/28 (64.3%) e no de 95% em 27/28 (96.4%); nacional 50.98 [48.27–53.72], real 48.99
+- w(f) = f: erro médio por estado 2.02 pt; o final real cai no intervalo de 80% em 18/28 (64.3%) e no de 95% em 27/28 (96.4%); nacional 50.98 [48.27–53.73], real 48.99
 - w(f) = 0 (só ajuste uniforme): erro médio por estado 2.21 pt; o final real cai no intervalo de 80% em 19/28 (67.9%) e no de 95% em 26/28 (92.9%); nacional 51.14 [48.36–53.95], real 48.99
 
 Ruído da parcial do estado em relação ao final do estado (pontos), modelo × observado:
@@ -45,8 +45,8 @@ Motor sobre a noite sintética (prior = 1º turno 2022 + ajuste; alvo = 50.84, d
 | hora | % seções | parcial nacional | extrapolação ingênua | projeção | 80% | 95% | P(Lula > 50) | rótulo |
 |---|---|---|---|---|---|---|---|---|
 | 17h10 | 1.5 | 42.63 | 42.63 | 49.38 | 47.21–51.48 | 45.93–52.56 | 36.2% | Flávio levemente favorável |
-| 17h20 | 2.4 | 43.24 | 43.24 | 49.44 | 47.33–51.48 | 46.10–52.55 | 37.1% | Flávio levemente favorável |
-| 17h30 | 3.8 | 43.27 | 43.27 | 49.52 | 47.52–51.49 | 46.36–52.52 | 38.5% | Flávio levemente favorável |
+| 17h20 | 2.4 | 43.24 | 43.24 | 49.44 | 47.33–51.49 | 46.10–52.55 | 37.1% | Flávio levemente favorável |
+| 17h30 | 3.8 | 43.27 | 43.27 | 49.52 | 47.51–51.49 | 46.35–52.52 | 38.5% | Flávio levemente favorável |
 | 17h40 | 5.9 | 43.54 | 43.54 | 49.54 | 47.59–51.45 | 46.48–52.45 | 38.5% | Flávio levemente favorável |
 | 17h50 | 8.6 | 44.10 | 44.10 | 49.75 | 47.92–51.55 | 46.90–52.51 | 43.4% | Flávio levemente favorável |
 | 18h00 | 12.2 | 44.80 | 44.80 | 49.75 | 48.05–51.43 | 47.12–52.32 | 42.9% | Flávio levemente favorável |
@@ -60,11 +60,11 @@ Motor sobre a noite sintética (prior = 1º turno 2022 + ajuste; alvo = 50.84, d
 | 20h40 | 92.2 | 48.62 | 48.62 | 48.75 | 48.44–49.07 | 48.28–49.23 | 0.0% | Flávio muito favorável |
 | 21h00 | 95.1 | 48.71 | 48.71 | 48.81 | 48.58–49.03 | 48.46–49.15 | 0.0% | Flávio muito favorável |
 | 21h20 | 97.7 | 48.88 | 48.88 | 48.87 | 48.74–49.00 | 48.67–49.07 | 0.0% | Flávio muito favorável |
-| 21h40 | 99.2 | 48.94 | 48.94 | 48.94 | 48.89–48.99 | 48.87–49.01 | -0.0% | Flávio muito favorável |
-| 22h00 | 99.6 | 48.96 | 48.96 | 48.96 | 48.93–48.99 | 48.92–49.00 | 0.0% | Flávio muito favorável |
-| 22h20 | 99.8 | 48.97 | 48.97 | 48.97 | 48.95–48.99 | 48.95–49.00 | -0.0% | Flávio muito favorável |
+| 21h40 | 99.2 | 48.94 | 48.94 | 48.94 | 48.89–48.99 | 48.87–49.01 | 0.0% | Flávio muito favorável |
+| 22h00 | 99.6 | 48.96 | 48.96 | 48.96 | 48.93–48.99 | 48.92–49.00 | -0.0% | Flávio muito favorável |
+| 22h20 | 99.8 | 48.97 | 48.97 | 48.97 | 48.95–48.99 | 48.95–49.00 | 0.0% | Flávio muito favorável |
 | 22h40 | 99.9 | 48.98 | 48.98 | 48.98 | 48.97–48.99 | 48.96–48.99 | -0.0% | Flávio muito favorável |
-| 23h00 | 99.9 | 48.98 | 48.98 | 48.98 | 48.97–48.99 | 48.97–48.99 | -0.0% | Flávio muito favorável |
+| 23h00 | 99.9 | 48.98 | 48.98 | 48.98 | 48.97–48.99 | 48.97–48.99 | 0.0% | Flávio muito favorável |
 ✔ converge: projeção final 48.98 × real 48.99
 ✔ intervalo de 95% contém o real em 36/36 momentos da noite; 80% em 31/36
 ✔ no começo da noite (< 30% apurado) os intervalos de 95% não ficam estreitos: menor largura 4.21 pt
@@ -81,7 +81,7 @@ Final estimado = parcial − Δ(X), com as duas curvas. Resultado real: Lula 50,
 Ressalva: a curva de 2022 foi medida nesses mesmos pontos, então ela sempre acerta 2022 (teste circular); o que o teste mostra é que a faixa entre as duas curvas contém o real.
 
 ## 6.5 Simetria
-✔ trocar os rótulos espelha as saídas: maior diferença 3.4e-13 (5 cenários aleatórios)
+✔ trocar os rótulos espelha as saídas: maior diferença 2.4e-13 (5 cenários aleatórios)
 
 ## Conferência: mistura analítica × Monte Carlo de 20 mil sorteios
 - 18h16 sintético: analítico média 49.55, 80% 48.00–51.09, P(A) 35.7%; Monte Carlo média 49.54, 80% 48.00–51.07, P(A) 34.9%

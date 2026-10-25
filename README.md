@@ -38,6 +38,8 @@ Para cada estado: `F_uf = base_uf + s + ε_uf` e a parcial `p_uf = F_uf + (1−f
 
 O peso da parcial de cada estado, `w(f) = σε² / (σε² + (1−f)^1,6·σu²)`, sai do próprio modelo e vai a 1 quando o estado termina.
 
+Na página, o cálculo roda num Web Worker (`docs/calculo.js`): os botões respondem na hora e os números mostram um esqueleto até o resultado chegar (≈ 10–40 ms no computador). A grade é adaptativa: uma passada grossa acha onde está a massa da posterior, e uma fina calcula só ali.
+
 O cálculo é **semi-analítico**. A posterior de (s, b) é calculada numa grade, e o nacional é uma mistura de normais. Isso equivale a infinitos sorteios e espelha os dois candidatos exatamente. Comparado com um Monte Carlo de 20 mil sorteios no mesmo caso, dá média 49,55 × 49,54 e P 35,7% × 34,9%.
 
 ### Números calibrados

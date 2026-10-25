@@ -18,7 +18,7 @@ export const PARAMS = {
   sigmaB: 2.0, // viés comum de ordem de apuração (testei 2, 3 e 4: 2 teve menor erro por estado e cobertura de 95% completa; ver README)
   gamma: 0.8, // como o ruído da parcial cai com f
   t90: 2.132, // quantil 95% da t(4): converte o intervalo de 90% das pesquisas em escala
-  grid: { sHalf: 18, sStep: 0.04, bHalf: 10, bStep: 0.2 },
+  grid: { sHalf: 18, bHalf: 10, coarse: [145, 41], fine: [121, 31] }, // grade adaptativa: grossa para achar a massa, fina só ali
 };
 
 const SQRT2PI = Math.sqrt(2 * Math.PI);
@@ -52,27 +52,41 @@ export function projetar(estados, parciais, alvo, P = PARAMS) {
   const escala = alvo.meio90 / P.t90;
   const obs = ufs.filter((x) => x.has);
 
-  // ---- posterior de (s, b) na grade
+  // ---- posterior de (s, b): grade grossa para achar onde está a massa, depois grade fina só ali
+  // (as duas grades são simétricas em torno de s0 e de b = 0, então a troca de rótulos continua exata)
   const G = P.grid;
-  const sN = Math.round((2 * G.sHalf) / G.sStep) + 1, bN = Math.round((2 * G.bHalf) / G.bStep) + 1;
-  const cells = [];
-  let maxL = -Infinity;
-  for (let i = 0; i < sN; i++) {
-    const s = s0 - G.sHalf + i * G.sStep;
-    const lp = Math.log(t4((s - s0) / escala));
-    for (let j = 0; j < bN; j++) {
-      const b = -G.bHalf + j * G.bStep;
-      let ll = lp - (b * b) / (2 * P.sigmaB ** 2);
-      for (const x of obs) { const d = x.p - x.base - s - (1 - x.f) * b; ll -= (d * d) / (2 * x.varD); }
-      cells.push([s, b, ll]);
-      if (ll > maxL) maxL = ll;
+  const grade = (sLo, sHi, sN, bLo, bHi, bN) => {
+    const out = [];
+    let mx = -Infinity;
+    for (let i = 0; i < sN; i++) {
+      const s = sLo + ((sHi - sLo) * i) / (sN - 1);
+      const lp = Math.log(t4((s - s0) / escala));
+      for (let j = 0; j < bN; j++) {
+        const b = bLo + ((bHi - bLo) * j) / (bN - 1);
+        let ll = lp - (b * b) / (2 * P.sigmaB ** 2);
+        for (const x of obs) { const d = x.p - x.base - s - (1 - x.f) * b; ll -= (d * d) / (2 * x.varD); }
+        out.push([s, b, ll]);
+        if (ll > mx) mx = ll;
+      }
     }
-  }
+    return { out, mx };
+  };
+  const gs = G.coarse;
+  const g1 = grade(s0 - G.sHalf, s0 + G.sHalf, gs[0], -G.bHalf, G.bHalf, gs[1]);
+  const ds = (2 * G.sHalf) / (gs[0] - 1), db = (2 * G.bHalf) / (gs[1] - 1);
+  let sLo = Infinity, sHi = -Infinity, bLo = Infinity, bHi = -Infinity;
+  for (const [s, b, ll] of g1.out) if (ll > g1.mx - 25) { sLo = Math.min(sLo, s); sHi = Math.max(sHi, s); bLo = Math.min(bLo, b); bHi = Math.max(bHi, b); }
+  const { out: cells, mx: maxL } = grade(sLo - ds, sHi + ds, G.fine[0], bLo - db, bHi + db, G.fine[1]);
+  // cada ponto da grade representa uma faixa de s: soma a variância de uma uniforme do tamanho do passo,
+  // para a mistura ficar contínua mesmo com poucos pontos (sem isso a probabilidade fica "em degraus")
+  const passoS = (sHi - sLo + 2 * ds) / (G.fine[0] - 1);
+  const varPasso = (passoS * passoS) / 12;
   // normaliza e descarta o que não pesa nada
   let Z = 0;
   const live = [];
   for (const c of cells) { const w = Math.exp(c[2] - maxL); if (w > 1e-10) { live.push([c[0], c[1], w]); Z += w; } }
   // ---- para cada célula: nacional ~ N(m, v); estados ~ N(mu, var)
+  const kMed = ufs.reduce((a, x) => a + x.w * x.k, 0); // quanto o nacional ainda depende de s
   const mix = live.map(([s, b, w]) => {
     let m = 0, v = 0;
     for (const x of ufs) {
@@ -81,7 +95,7 @@ export function projetar(estados, parciais, alvo, P = PARAMS) {
       const va = P.sigmaEps ** 2 * (1 - x.k);
       m += x.w * mu; v += x.w * x.w * va;
     }
-    return { w: w / Z, s, b, m, sd: Math.sqrt(Math.max(v, 1e-12)) };
+    return { w: w / Z, s, b, m, sd: Math.sqrt(Math.max(v + varPasso * (1 - kMed) ** 2, 1e-12)) };
   });
   const cdf = (y) => mix.reduce((acc, c) => acc + c.w * normCdf((y - c.m) / c.sd), 0);
   const quant = (q) => { let lo = 0, hi = 100; for (let it = 0; it < 50; it++) { const mid = (lo + hi) / 2; if (cdf(mid) < q) lo = mid; else hi = mid; } return (lo + hi) / 2; };

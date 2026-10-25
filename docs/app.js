@@ -1,4 +1,5 @@
-// Placar ao Vivo: busca o TSE direto do navegador e roda o motor por estado aqui mesmo.
+// Placar ao Vivo: busca o TSE direto do navegador; o motor roda num Web Worker (calculo.js),
+// então a tela e os botões respondem na hora, e os números mostram um "esqueleto" enquanto o cálculo não chega.
 import { projetar, rotulo, definido, delta, CURVAS } from "./motor.js";
 import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js";
 import { apuracao, rng } from "./simulado.js";
@@ -15,12 +16,13 @@ const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ==
 // previsões das pesquisas (seção 7 do prompt; fechamento de 24/10/2026)
 const ALVOS = {
   A: { centro: 49.15, meio90: 5.3, nome: "A · só pesquisas", nota: "49,15% para Lula (90%: 43,8–54,4); P(Lula) 37,5%." },
-  B: { centro: 49.26, meio90: 4.55, nome: "B · com correção histórica (padrão)", nota: "49,26% para Lula (90%: 44,7–53,8); P(Lula) 37,4%." },
-  C: { centro: 48.2, meio90: 4.55, nome: "C · sem quem faltou no 1º turno", nota: "48,2% para Lula; P(Lula) 26%. O intervalo dessa versão não veio no fechamento: usei a mesma largura da B (verificar)." },
+  B: { centro: 49.26, meio90: 4.55, nome: "B · correção histórica", nota: "Padrão. 49,26% para Lula (90%: 44,7–53,8); P(Lula) 37,4%." },
+  C: { centro: 48.2, meio90: 4.55, nome: "C · sem faltosos do 1º turno", nota: "48,2% para Lula; P(Lula) 26%. O intervalo dessa versão não veio no fechamento: usei a mesma largura da B (verificar)." },
   E: { centro: 50, meio90: 4.55, nome: "Empate (50%)", nota: "Ponto de partida neutro: 50% para cada um, com a largura da B." },
   L: { centro: 50, meio90: 4.55, nome: "Valor livre", nota: "Valor digitado, com a largura da B." },
 };
 let alvoKey = store.get("pv-alvo", "B");
+if (!ALVOS[alvoKey]) alvoKey = "B";
 let livre = store.get("pv-livre", 50);
 const alvo = () => (alvoKey === "L" ? { ...ALVOS.L, centro: Number(livre) } : ALVOS[alvoKey]);
 
@@ -30,7 +32,7 @@ let cd = "6258";
 const tse = {}; // UF -> última leitura do TSE
 let br = null; // arquivo nacional do TSE
 let manual = store.get("pv-manual", {}); // UF ou BR -> { f, A, B }
-let hist = store.get("pv-hist-" + cd, []);
+let hist = [];
 let ultimoErro = null, ultimoOk = null;
 
 // ----------------------------------------------------------------------------- dados combinados (TSE + manual)
@@ -51,21 +53,45 @@ function nacionalAtual(par) {
   return { f, A, B, p: A + B ? (100 * A) / (A + B) : null };
 }
 
-// ----------------------------------------------------------------------------- desenho
-function render() {
-  const par = parciais();
-  const nat = nacionalAtual(par);
+// ----------------------------------------------------------------------------- cálculo em segundo plano (o pedido mais novo vence)
+let worker = null;
+try { worker = new Worker(new URL("./calculo.js", import.meta.url), { type: "module" }); } catch { worker = null; }
+let pedidoId = 0, emCurso = null, fila = null, ultimo = null, esqueleto = true;
+function montarPedido() {
+  const par = parciais(), nat = nacionalAtual(par);
   const temEstado = Object.values(par).some((q) => q.f > 0);
-  let r;
-  if (temEstado || !manual.BR) r = projetar(ESTADOS.map((e) => ({ uf: e.uf, base: e.base, Vesp: e.Vesp })), par, alvo());
-  else {
-    // só o nacional digitado: o país inteiro vira um "estado" (menos preciso)
-    const baseNat = ESTADOS.reduce((s, e) => s + e.base * e.Vesp, 0) / ESTADOS.reduce((s, e) => s + e.Vesp, 0);
-    r = projetar([{ uf: "BR", base: baseNat, Vesp: ESTADOS.reduce((s, e) => s + e.Vesp, 0) }], { BR: { f: nat.f, p: nat.p, vv: nat.A + nat.B, A: nat.A, B: nat.B } }, alvo());
-  }
-  const def = definido(par);
-  const lb = rotulo(r.A.pVence, def);
-  // status
+  const id = ++pedidoId;
+  if (temEstado || !manual.BR) return { msg: { id, estados: ESTADOS.map((e) => ({ uf: e.uf, base: e.base, Vesp: e.Vesp })), parciais: par, alvo: alvo() }, par, nat, alvoKey };
+  // só o nacional digitado: o país inteiro vira um "estado" (menos preciso)
+  const Vt = ESTADOS.reduce((s, e) => s + e.Vesp, 0), baseNat = ESTADOS.reduce((s, e) => s + e.base * e.Vesp, 0) / Vt;
+  return { msg: { id, estados: [{ uf: "BR", base: baseNat, Vesp: Vt }], parciais: par, nacionalSo: { BR: { f: nat.f, p: nat.p, vv: nat.A + nat.B, A: nat.A, B: nat.B } }, alvo: alvo() }, par, nat, alvoKey };
+}
+function calcular() {
+  const ped = montarPedido();
+  desenharStatus(ped.par, ped.nat);
+  if (emCurso) { fila = ped; return; }
+  enviar(ped);
+}
+function enviar(ped) {
+  emCurso = ped;
+  $("#calc").hidden = false;
+  if (worker) worker.postMessage(ped.msg);
+  else setTimeout(() => { // navegador sem Worker de módulo: calcula aqui mesmo, sem travar o toque que pediu
+    const m = ped.msg; const r = projetar(m.estados, m.nacionalSo || m.parciais, m.alvo);
+    receber({ id: m.id, r, def: definido(m.parciais) });
+  }, 30);
+}
+function receber(d) {
+  const ped = emCurso;
+  emCurso = null;
+  if (d.erro) { ultimoErro = "cálculo: " + d.erro; }
+  else if (ped && d.id === ped.msg.id) { ultimo = { ...ped, r: d.r, def: d.def }; esqueleto = false; desenharResultado(); }
+  if (fila) { const p = fila; fila = null; enviar(p); } else $("#calc").hidden = true;
+}
+if (worker) { worker.onmessage = (e) => receber(e.data); worker.onerror = () => { worker = null; if (emCurso) { const p = emCurso; emCurso = null; enviar(p); } }; }
+
+// ----------------------------------------------------------------------------- desenho: status (na hora) e resultado (quando o cálculo chega)
+function desenharStatus(par, nat) {
   $("#barra").style.width = `${(100 * nat.f).toFixed(2)}%`;
   $("#secoes").textContent = `${fmt(100 * nat.f, 2)}% das seções totalizadas`;
   $("#hora").textContent = modo === "sim" ? "" : br?.gerado ? `TSE gerou às ${br.gerado.split(" ")[1] || br.gerado}` : "";
@@ -75,22 +101,32 @@ function render() {
   modoEl.textContent = modo === "sim" ? "SIMULAÇÃO" : nManual ? "manual + TSE" : ultimoErro && !ultimoOk ? "TSE fora" : "TSE ao vivo";
   $("#statusTxt").textContent = modo === "sim" ? "Apuração simulada (números inventados)" : nat.f === 0 ? "Apuração ainda não começou (a votação vai até 17h de Brasília)" : nat.f >= 1 ? "Apuração encerrada no TSE" : "Apuração em andamento";
   $("#fonteTxt").textContent = modo === "sim" ? "" : ultimoErro ? `última falha: ${ultimoErro}` : ultimoOk ? `TSE consultado às ${ultimoOk}` : "";
-  // favorecimento
+  $("#mLista").textContent = nManual ? "Manuais: " + Object.entries(manual).map(([k, m]) => `${k} ${fmt(100 * m.f, 1)}% (${fmtInt(m.A)} × ${fmtInt(m.B)})`).join("; ") : "";
+}
+function marcarEsqueleto(on) {
+  esqueleto = on;
+  for (const id of ["#fav", "#duo", "#checagem", "#tabela"]) $(id).classList.toggle("carregando", on);
+}
+function desenharResultado() {
+  if (!ultimo) return;
+  marcarEsqueleto(false);
+  const { r, def, par, nat } = ultimo;
+  const lb = rotulo(r.A.pVence, def);
   const pA = r.A.pVence;
   $("#pA").style.width = `${(100 * pA).toFixed(2)}%`;
   $("#pB").style.width = `${(100 * (1 - pA)).toFixed(2)}%`;
   $("#favTxt").innerHTML = lb.quem ? `<span style="color:${COR[lb.quem]}">${NOME[lb.quem]}</span>: ${lb.texto}` : `Indefinido`;
-  // cartões, na ordem do número na urna
-  $("#duo").innerHTML = ["A", "B"].map((k) => {
+  for (const k of ["A", "B"]) {
     const o = r[k], parcial = nat.p === null ? null : k === "A" ? nat.p : 100 - nat.p, votos = k === "A" ? nat.A : nat.B;
-    return `<article class="cand" style="--c:${COR[k]}"><div class="nm">${NOME[k]}</div><div class="num">nº ${NUM[k]}</div>
-      <div class="lab">chance de vencer</div><div class="big">${fmtPct(o.pVence)}</div>
-      <div class="lab">projeção final</div><div class="mid">${fmt(o.media, 1)}%</div>
-      <div class="iv">80%: ${fmt(o.lo80, 1)}–${fmt(o.hi80, 1)} · 95%: ${fmt(o.lo95, 1)}–${fmt(o.hi95, 1)}</div>
-      <div class="lab">parcial agora</div><div class="par">${fmt(parcial, 2)}% · ${fmtInt(votos)} votos</div></article>`;
-  }).join("");
+    const c = $(`#cand${k}`);
+    c.querySelector(".big").textContent = fmtPct(o.pVence);
+    c.querySelector(".mid").textContent = `${fmt(o.media, 1)}%`;
+    c.querySelector(".iv").textContent = `80%: ${fmt(o.lo80, 1)}–${fmt(o.hi80, 1)} · 95%: ${fmt(o.lo95, 1)}–${fmt(o.hi95, 1)}`;
+    c.querySelector(".par").textContent = `${fmt(parcial, 2)}% · ${fmtInt(votos)} votos`;
+  }
   // avisos
   const av = [];
+  const nManual = Object.keys(manual).length;
   if (nat.f > 0 && nat.f < 0.3) av.push("Cedo demais: SP, RJ, BA, CE e PE costumam entrar tarde. A parcial nacional agora ainda não diz muito.");
   const grandes = ["SP", "MG", "RJ", "BA", "RS", "PR", "PE", "CE"].filter((uf) => (par[uf]?.f || 0) < 0.2);
   if (nat.f > 0 && grandes.length) av.push(`Estados grandes ainda abaixo de 20% apurado: ${grandes.join(", ")}.`);
@@ -101,15 +137,16 @@ function render() {
   $("#avisos").innerHTML = av.map((t) => `<p>⚠ ${t}</p>`).join("");
   // checagem simples
   const X = 100 * nat.f;
+  const a0 = alvo();
   if (nat.p !== null && X > 0) {
-    const esp = Object.keys(CURVAS).map((c) => alvo().centro + delta(c, X));
+    const esp = Object.keys(CURVAS).map((c) => a0.centro + delta(c, X));
     const lo = Math.min(...esp), hi = Math.max(...esp);
     const cell = (k) => {
       const p = k === "A" ? nat.p : 100 - nat.p, a = k === "A" ? lo : 100 - hi, b = k === "A" ? hi : 100 - lo;
       const st = p < a - 0.3 ? "abaixo do esperado" : p > b + 0.3 ? "acima do esperado" : "dentro do esperado";
       return `<div style="--c:${COR[k]}"><b>${NOME[k]}</b><br>parcial ${fmt(p, 2)}%<br>esperado agora: ${fmt(a, 1)}–${fmt(b, 1)}%<br><span class="muted small">${st}</span></div>`;
     };
-    $("#checagem").innerHTML = `<div class="check">${cell("A")}${cell("B")}</div><p class="muted small">Faixa = previsão de partida (${fmt(alvo().centro, 2)}% para Lula) + o quanto a parcial costumava ficar longe do final com ${fmt(X, 1)}% apurado, no 1º turno de 2026 e no 2º turno de 2022. As duas curvas discordam em até 2 pontos no começo da noite, e em 2022 o desvio do 2º turno foi cerca de metade do do 1º. É só uma conferência; a projeção de verdade é a por estado.</p>`;
+    $("#checagem").innerHTML = `<div class="check">${cell("A")}${cell("B")}</div><p class="muted small">Faixa = previsão de partida (${fmt(a0.centro, 2)}% para Lula) + o quanto a parcial costumava ficar longe do final com ${fmt(X, 1)}% apurado, no 1º turno de 2026 e no 2º turno de 2022. As duas curvas discordam em até 2 pontos no começo da noite, e em 2022 o desvio do 2º turno foi cerca de metade do do 1º. É só uma conferência; a projeção de verdade é a por estado.</p>`;
   } else $("#checagem").innerHTML = `<p class="muted">Aparece quando a apuração começar.</p>`;
   // tabela por estado
   const linhas = [...r.porUF].sort((a, b) => b.V - a.V);
@@ -124,11 +161,7 @@ function render() {
     }
   }
   grafico();
-  // alvos
-  $("#alvos").innerHTML = Object.entries(ALVOS).map(([k, v]) => `<button type="button" data-alvo="${k}" aria-pressed="${k === alvoKey}">${v.nome}</button>`).join("");
-  $("#livreRow").hidden = alvoKey !== "L";
-  $("#alvoNota").textContent = alvo().nota + ` Ajuste inicial s0 = ${fmt(r.s0, 2)} ponto; depois da apuração: ${fmt(r.sPost, 2)} ± ${fmt(r.sSd, 2)}.`;
-  $("#mLista").textContent = nManual ? "Manuais: " + Object.entries(manual).map(([k, m]) => `${k} ${fmt(100 * m.f, 1)}% (${fmtInt(m.A)} × ${fmtInt(m.B)})`).join("; ") : "";
+  $("#alvoNota").textContent = a0.nota + ` Ajuste inicial s0 = ${fmt(r.s0, 2)} ponto; depois da apuração: ${fmt(r.sPost, 2)} ± ${fmt(r.sSd, 2)}.`;
 }
 
 function grafico() {
@@ -154,8 +187,25 @@ function grafico() {
   $("#grafico").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Projeção ao longo da noite">${s}</svg>`;
 }
 
+// ----------------------------------------------------------------------------- controles fixos (montados uma vez; nunca são recriados)
+function montarControles() {
+  $("#duo").innerHTML = ["A", "B"].map((k) => `<article class="cand" id="cand${k}" style="--c:${COR[k]}"><div class="nm">${NOME[k]}</div><div class="num">nº ${NUM[k]}</div>
+    <div class="lab">chance de vencer</div><div class="big sk">—</div>
+    <div class="lab">projeção final</div><div class="mid sk">—</div>
+    <div class="iv sk">—</div>
+    <div class="lab">parcial agora</div><div class="par sk">—</div></article>`).join("");
+  $("#alvos").innerHTML = Object.entries(ALVOS).map(([k, v]) => `<button type="button" data-alvo="${k}" aria-pressed="${k === alvoKey}">${v.nome}</button>`).join("");
+  $("#livreRow").hidden = alvoKey !== "L";
+  $("#livre").value = livre;
+  $("#mUF").innerHTML = `<option value="BR">Brasil (só o nacional)</option>` + ESTADOS.map((e) => `<option>${e.uf}</option>`).join("");
+}
+function marcarAlvo() {
+  for (const b of document.querySelectorAll("[data-alvo]")) b.setAttribute("aria-pressed", String(b.dataset.alvo === alvoKey));
+  $("#livreRow").hidden = alvoKey !== "L";
+}
+
 // ----------------------------------------------------------------------------- TSE ao vivo: 1 arquivo por vez; cada um a cada ~30 s
-let timer = 0, idx = 0, pend = false, ultimoRender = 0;
+let timer = 0, idx = 0, novos = false, ultimoCalculo = 0;
 const LISTA = [...UFS, "br"];
 async function proximo() {
   if (modo !== "vivo") return;
@@ -166,9 +216,10 @@ async function proximo() {
     const d = lerArquivo(await resp.json(), uf, cd);
     if (uf === "br") br = d; else tse[uf.toUpperCase()] = d;
     ultimoOk = new Date().toLocaleTimeString("pt-BR"); ultimoErro = null;
-    pend = true;
+    novos = true;
   } catch (e) { ultimoErro = e.message; }
-  if (pend && Date.now() - ultimoRender > 4000) { pend = false; ultimoRender = Date.now(); render(); }
+  if (modo !== "vivo") return;
+  if (novos && Date.now() - ultimoCalculo > 4000) { novos = false; ultimoCalculo = Date.now(); calcular(); }
   timer = setTimeout(proximo, Math.round(30000 / LISTA.length));
 }
 
@@ -176,7 +227,7 @@ async function proximo() {
 let simTimer = 0;
 function simular() {
   modo = "sim"; clearTimeout(timer); clearTimeout(simTimer);
-  hist = [];
+  hist = []; marcarEsqueleto(true);
   const R = rng(Date.now() % 100000);
   const a = alvo();
   const s = a.centro - 48.726 + R.n() * 1.5, b = R.n() * 2;
@@ -186,44 +237,55 @@ function simular() {
   const passo = () => {
     if (modo !== "sim") return;
     const q = sim(min);
-    for (const e of ESTADOS) tse[e.uf] = { ...q[e.uf], restantes: q[e.uf].restantes };
+    for (const e of ESTADOS) tse[e.uf] = { ...q[e.uf] };
     br = null;
-    render();
+    calcular();
     min += 4;
     if (min <= 380) simTimer = setTimeout(passo, 700);
   };
   passo();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 function aoVivo() {
   modo = "vivo"; clearTimeout(simTimer); clearTimeout(timer);
   for (const k of Object.keys(tse)) delete tse[k];
+  br = null;
   hist = store.get("pv-hist-" + cd, []);
-  idx = 0; render(); proximo();
+  marcarEsqueleto(true);
+  idx = 0; calcular(); proximo();
 }
 
-// ----------------------------------------------------------------------------- eventos
+// ----------------------------------------------------------------------------- eventos (resposta visual imediata; o cálculo vem depois)
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (!b) return;
-  if (b.dataset.alvo) { alvoKey = b.dataset.alvo; store.set("pv-alvo", alvoKey); hist = modo === "vivo" ? hist : []; render(); }
-  if (b.id === "demo") simular();
+  if (b.dataset.alvo) {
+    if (b.dataset.alvo === alvoKey) return;
+    alvoKey = b.dataset.alvo; store.set("pv-alvo", alvoKey);
+    marcarAlvo(); marcarEsqueleto(true);
+    if (modo === "sim") hist = [];
+    calcular();
+  }
+  if (b.id === "demo") { b.textContent = "Simulando…"; setTimeout(() => (b.textContent = "Simular de novo"), 1200); simular(); }
   if (b.id === "vivo") aoVivo();
   if (b.id === "mSalvar") {
     const uf = $("#mUF").value, f = Number($("#mF").value) / 100, A = Number($("#mA").value), B = Number($("#mB").value);
     if (!(f >= 0 && f <= 1) || !(A >= 0) || !(B >= 0)) return;
-    manual[uf] = { f, A, B }; store.set("pv-manual", manual); render();
+    manual[uf] = { f, A, B }; store.set("pv-manual", manual); marcarEsqueleto(true); calcular();
   }
-  if (b.id === "mLimpar") { manual = {}; store.set("pv-manual", manual); render(); }
+  if (b.id === "mLimpar") { manual = {}; store.set("pv-manual", manual); marcarEsqueleto(true); calcular(); }
 });
-$("#livre").addEventListener("change", (e) => { livre = Number(e.target.value); store.set("pv-livre", livre); render(); });
+$("#livre").addEventListener("change", (e) => { livre = Number(e.target.value); store.set("pv-livre", livre); marcarEsqueleto(true); calcular(); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden && modo === "vivo") { clearTimeout(timer); proximo(); } });
 
 // ----------------------------------------------------------------------------- início
 (async function inicio() {
   const est = await (await fetch("estados.json", { cache: "no-cache" })).json();
   ESTADOS = est.map((r) => ({ uf: r.uf, base: r.base26, Vesp: r.validos26_2t_esp, ap1752: r.apurado_17h52_1t26, secoes: r.validos26_2t_esp }));
-  $("#mUF").innerHTML = `<option value="BR">Brasil (só o nacional)</option>` + ESTADOS.map((e) => `<option>${e.uf}</option>`).join("");
+  montarControles();
+  marcarEsqueleto(true);
   try { const el = await descobrirEleicao(); cd = el.cd; } catch { /* fica com 6258, confirmado em 24/10 */ }
-  $("#versao").textContent = `Eleição TSE ${cd}. Página estática: o seu navegador consulta o TSE diretamente.`;
+  hist = store.get("pv-hist-" + cd, []);
+  $("#versao").textContent = `Eleição TSE ${cd}. Página estática: o seu navegador consulta o TSE diretamente; o cálculo roda em segundo plano.`;
   if (new URLSearchParams(location.search).has("simulado")) simular(); else aoVivo();
 })();
