@@ -1,8 +1,8 @@
 // Placar ao Vivo: busca o TSE direto do navegador; o motor roda num Web Worker (calculo.js),
 // então a tela e os botões respondem na hora, e os números mostram um "esqueleto" enquanto o cálculo não chega.
-import { projetar, PARAMS, PARAMS_M2, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025k";
-import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025k";
-import { apuracao, cenario, CENARIOS, rng } from "./simulado.js?v=20261025k";
+import { projetar, PARAMS, PARAMS_M2, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025l";
+import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025l";
+import { apuracao, cenario, CENARIOS, rng } from "./simulado.js?v=20261025l";
 
 const $ = (s) => document.querySelector(s);
 const NOME = { A: "Lula", B: "Flávio Bolsonaro" };
@@ -63,6 +63,8 @@ function parciais() {
 }
 function nacionalAtual(par) {
   if (manualAtivo().BR) { const m = manual.BR; return { f: m.f, A: m.A, B: m.B, p: m.A + m.B ? (100 * m.A) / (m.A + m.B) : null, manual: true }; }
+  // ao vivo, o arquivo nacional do TSE costuma estar à frente dos arquivos por estado: a parcial nacional mostrada vem dele
+  if (br && modo === "vivo" && !Object.keys(manualAtivo()).length && Number.isFinite(br.A)) return { f: br.f, A: br.A, B: br.B, p: br.A + br.B ? (100 * br.A) / (br.A + br.B) : null };
   let A = 0, B = 0, sec = 0, tot = 0;
   for (const e of ESTADOS) { const q = par[e.uf]; if (q) { A += q.A; B += q.B; } sec += (q?.f || 0) * e.secoes; tot += e.secoes; }
   const f = br && modo === "vivo" && !Object.keys(manualAtivo()).length ? br.f : sec / tot;
@@ -74,7 +76,7 @@ function nacionalAtual(par) {
 const MOTOR_PADRAO = 2;
 const MOTOR = { 1: 1, 2: 2 }[new URLSearchParams(location.search).get("motor")] ?? MOTOR_PADRAO;
 let worker = null;
-try { worker = new Worker(new URL("./calculo.js?v=20261025k", import.meta.url), { type: "module" }); } catch { worker = null; }
+try { worker = new Worker(new URL("./calculo.js?v=20261025l", import.meta.url), { type: "module" }); } catch { worker = null; }
 let pedidoId = 0, emCurso = null, fila = null, ultimo = null;
 function montarPedido() {
   const par = parciais(), nat = nacionalAtual(par);
@@ -307,7 +309,7 @@ let simTimer = 0, simCen = null, HIST = null;
 async function simular() {
   modo = "sim"; clearTimeout(timer); clearTimeout(simTimer);
   hist = []; marcarEsqueleto(true);
-  HIST ??= await (await fetch("historico.json?v=20261025k")).json();
+  HIST ??= await (await fetch("historico.json?v=20261025l")).json();
   const R = rng(Date.now() % 100000);
   // resultado final por estado: regiões, abstenção e limites históricos (simulado.js); a apuração anda por cima dele
   simCen = cenario(ESTADOS, HIST, R, { centro: alvo().centro, id: $("#cenario").value });
@@ -377,7 +379,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && mo
 
 // ----------------------------------------------------------------------------- início
 (async function inicio() {
-  const est = await (await fetch("estados.json?v=20261025k", { cache: "no-cache" })).json();
+  const est = await (await fetch("estados.json?v=20261025l", { cache: "no-cache" })).json();
   ESTADOS = est.map((r) => ({ uf: r.uf, regiao: r.regiao, outros: 1 - (r.lula26_1t + r.flavio26_1t) / r.validos26_1t, base: r.base26, Vesp: r.validos26_2t_esp, ap1752: r.apurado_17h52_1t26, secoes: r.validos26_2t_esp }));
   montarControles();
   marcarEsqueleto(true);
