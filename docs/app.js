@@ -1,8 +1,8 @@
 // Placar ao Vivo: busca o TSE direto do navegador; o motor roda num Web Worker (calculo.js),
 // então a tela e os botões respondem na hora, e os números mostram um "esqueleto" enquanto o cálculo não chega.
-import { projetar, PARAMS, PARAMS_M2, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025g";
-import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025g";
-import { apuracao, cenario, CENARIOS, rng } from "./simulado.js?v=20261025g";
+import { projetar, PARAMS, PARAMS_M2, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025h";
+import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025h";
+import { apuracao, cenario, CENARIOS, rng } from "./simulado.js?v=20261025h";
 
 const $ = (s) => document.querySelector(s);
 const NOME = { A: "Lula", B: "Flávio Bolsonaro" };
@@ -41,7 +41,12 @@ let modo = "vivo"; // vivo | sim
 let cd = "6258";
 const tse = {}; // UF -> última leitura do TSE
 let br = null; // arquivo nacional do TSE
-let manual = store.get("pv-manual", {}); // UF ou BR -> { f, A, B }
+// UF ou BR -> { f, A, B }. Entradas sem votos (ex.: "Aplicar" com os campos vazios) não valem e são descartadas.
+const valida = (m) => m && Number.isFinite(m.f) && m.f > 0 && m.f <= 1 && m.A >= 0 && m.B >= 0 && m.A + m.B > 0;
+let manual = Object.fromEntries(Object.entries(store.get("pv-manual", {})).filter(([, m]) => valida(m)));
+store.set("pv-manual", manual);
+// na simulação as entradas manuais não valem (a simulação não mistura dados de fora)
+const manualAtivo = () => (modo === "sim" ? {} : manual);
 let hist = [];
 let ultimoErro = null, ultimoOk = null, horaErro = null;
 let ordem = "tamanho";
@@ -50,17 +55,17 @@ let ordem = "tamanho";
 function parciais() {
   const out = {};
   for (const e of ESTADOS) {
-    const m = manual[e.uf], t = tse[e.uf];
+    const m = manualAtivo()[e.uf], t = tse[e.uf];
     if (m) { const vv = m.A + m.B; out[e.uf] = { f: m.f, A: m.A, B: m.B, vv, p: vv ? (100 * m.A) / vv : null, restantes: t?.restantes ?? null, manual: true }; }
     else if (t) out[e.uf] = t;
   }
   return out;
 }
 function nacionalAtual(par) {
-  if (manual.BR) { const m = manual.BR; return { f: m.f, A: m.A, B: m.B, p: m.A + m.B ? (100 * m.A) / (m.A + m.B) : null, manual: true }; }
+  if (manualAtivo().BR) { const m = manual.BR; return { f: m.f, A: m.A, B: m.B, p: m.A + m.B ? (100 * m.A) / (m.A + m.B) : null, manual: true }; }
   let A = 0, B = 0, sec = 0, tot = 0;
   for (const e of ESTADOS) { const q = par[e.uf]; if (q) { A += q.A; B += q.B; } sec += (q?.f || 0) * e.secoes; tot += e.secoes; }
-  const f = br && modo === "vivo" && !Object.keys(manual).length ? br.f : sec / tot;
+  const f = br && modo === "vivo" && !Object.keys(manualAtivo()).length ? br.f : sec / tot;
   return { f, A, B, p: A + B ? (100 * A) / (A + B) : null };
 }
 
@@ -69,13 +74,13 @@ function nacionalAtual(par) {
 const MOTOR_PADRAO = 1;
 const MOTOR = { 1: 1, 2: 2 }[new URLSearchParams(location.search).get("motor")] ?? MOTOR_PADRAO;
 let worker = null;
-try { worker = new Worker(new URL("./calculo.js?v=20261025g", import.meta.url), { type: "module" }); } catch { worker = null; }
+try { worker = new Worker(new URL("./calculo.js?v=20261025h", import.meta.url), { type: "module" }); } catch { worker = null; }
 let pedidoId = 0, emCurso = null, fila = null, ultimo = null;
 function montarPedido() {
   const par = parciais(), nat = nacionalAtual(par);
   const temEstado = Object.values(par).some((q) => q.f > 0);
   const id = ++pedidoId;
-  if (temEstado || !manual.BR) return { msg: { id, estados: ESTADOS.map((e) => ({ uf: e.uf, regiao: e.regiao, base: e.base, Vesp: e.Vesp, outros: e.outros })), parciais: par, alvo: alvo(), motor: MOTOR }, par, nat };
+  if (temEstado || !manualAtivo().BR) return { msg: { id, estados: ESTADOS.map((e) => ({ uf: e.uf, regiao: e.regiao, base: e.base, Vesp: e.Vesp, outros: e.outros })), parciais: par, alvo: alvo(), motor: MOTOR }, par, nat };
   // só o nacional digitado: o país inteiro vira um "estado" (menos preciso)
   const Vt = ESTADOS.reduce((s, e) => s + e.Vesp, 0), baseNat = ESTADOS.reduce((s, e) => s + e.base * e.Vesp, 0) / Vt;
   return { msg: { id, estados: [{ uf: "BR", base: baseNat, Vesp: Vt }], parciais: par, nacionalSo: { BR: { f: nat.f, p: nat.p, vv: nat.A + nat.B, A: nat.A, B: nat.B } }, alvo: alvo(), motor: MOTOR }, par, nat };
@@ -132,7 +137,7 @@ setInterval(horaRelativa, 1000);
 function desenharStatus(nat) {
   $("#barra").style.width = `${(100 * nat.f).toFixed(2)}%`;
   $("#secoes").innerHTML = `${fmt(100 * nat.f, 2)}% apurado <span class="sub2">das seções do país</span>`;
-  const nManual = Object.keys(manual).length;
+  const nManual = Object.keys(manualAtivo()).length;
   const falhaGeral = ultimoErro && !ultimoOk;
   const modoEl = $("#modo");
   modoEl.className = "pill " + (modo === "sim" ? "sim" : nManual ? "manual" : falhaGeral ? "erro" : "vivo");
@@ -184,7 +189,7 @@ function desenharResultado() {
   }
   // avisos
   const av = [];
-  const nManual = Object.keys(manual).length;
+  const nManual = Object.keys(manualAtivo()).length;
   if (nat.f > 0 && nat.f < 0.3) av.push("Cedo demais: SP, RJ, BA, CE e PE costumam entrar tarde. A parcial nacional agora ainda não diz muito.");
   const grandes = ["SP", "MG", "RJ", "BA", "RS", "PR", "PE", "CE"].filter((uf) => (par[uf]?.f || 0) < 0.2);
   if (nat.f > 0 && grandes.length) av.push(`Estados grandes ainda abaixo de 20% apurado: ${grandes.join(", ")}.`);
@@ -287,6 +292,7 @@ async function proximo() {
     const resp = await fetch(urlUF(uf, cd), { cache: "no-cache" }); // revalida com ETag pelo cache do navegador
     if (!resp.ok) throw new Error(`HTTP ${resp.status} em ${uf}`);
     const d = lerArquivo(await resp.json(), uf, cd);
+    if (modo !== "vivo") return; // a simulação começou enquanto o arquivo chegava: não mistura
     if (uf === "br") br = d; else tse[uf.toUpperCase()] = d;
     ultimoOk = new Date(); ultimoErro = null;
     novos = true;
@@ -301,7 +307,7 @@ let simTimer = 0, simCen = null, HIST = null;
 async function simular() {
   modo = "sim"; clearTimeout(timer); clearTimeout(simTimer);
   hist = []; marcarEsqueleto(true);
-  HIST ??= await (await fetch("historico.json?v=20261025g")).json();
+  HIST ??= await (await fetch("historico.json?v=20261025h")).json();
   const R = rng(Date.now() % 100000);
   // resultado final por estado: regiões, abstenção e limites históricos (simulado.js); a apuração anda por cima dele
   simCen = cenario(ESTADOS, HIST, R, { centro: alvo().centro, id: $("#cenario").value });
@@ -361,7 +367,7 @@ document.addEventListener("click", (e) => {
   if (b.id === "vivo") aoVivo();
   if (b.id === "mSalvar") {
     const uf = $("#mUF").value, f = Number($("#mF").value) / 100, A = Number($("#mA").value), B = Number($("#mB").value);
-    if (!(f >= 0 && f <= 1) || !(A >= 0) || !(B >= 0)) return;
+    if (["#mF", "#mA", "#mB"].some((id) => $(id).value.trim() === "") || !valida({ f, A, B })) { $("#mLista").textContent = "Preencha % de seções (maior que 0) e os votos dos dois candidatos."; return; }
     manual[uf] = { f, A, B }; store.set("pv-manual", manual); marcarEsqueleto(true); calcular();
   }
   if (b.id === "mLimpar") { manual = {}; store.set("pv-manual", manual); marcarEsqueleto(true); calcular(); }
@@ -371,7 +377,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && mo
 
 // ----------------------------------------------------------------------------- início
 (async function inicio() {
-  const est = await (await fetch("estados.json?v=20261025g", { cache: "no-cache" })).json();
+  const est = await (await fetch("estados.json?v=20261025h", { cache: "no-cache" })).json();
   ESTADOS = est.map((r) => ({ uf: r.uf, regiao: r.regiao, outros: 1 - (r.lula26_1t + r.flavio26_1t) / r.validos26_1t, base: r.base26, Vesp: r.validos26_2t_esp, ap1752: r.apurado_17h52_1t26, secoes: r.validos26_2t_esp }));
   montarControles();
   marcarEsqueleto(true);
