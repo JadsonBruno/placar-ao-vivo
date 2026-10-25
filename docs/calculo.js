@@ -1,5 +1,5 @@
 // Web Worker: roda o motor fora da tela, para os toques nunca esperarem pelo cálculo.
-import { projetar, definido } from "./motor.js";
+import { projetar, definido } from "./motor.js?v=20261025b";
 
 self.onmessage = (e) => {
   const { id, estados, parciais, alvo, nacionalSo } = e.data;

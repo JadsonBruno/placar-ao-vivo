@@ -1,8 +1,8 @@
 // Placar ao Vivo: busca o TSE direto do navegador; o motor roda num Web Worker (calculo.js),
 // então a tela e os botões respondem na hora, e os números mostram um "esqueleto" enquanto o cálculo não chega.
-import { projetar, rotulo, definido, delta, CURVAS } from "./motor.js";
-import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js";
-import { apuracao, rng } from "./simulado.js";
+import { projetar, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025b";
+import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025b";
+import { apuracao, rng } from "./simulado.js?v=20261025b";
 
 const $ = (s) => document.querySelector(s);
 const NOME = { A: "Lula", B: "Flávio Bolsonaro" };
@@ -55,7 +55,7 @@ function nacionalAtual(par) {
 
 // ----------------------------------------------------------------------------- cálculo em segundo plano (o pedido mais novo vence)
 let worker = null;
-try { worker = new Worker(new URL("./calculo.js", import.meta.url), { type: "module" }); } catch { worker = null; }
+try { worker = new Worker(new URL("./calculo.js?v=20261025b", import.meta.url), { type: "module" }); } catch { worker = null; }
 let pedidoId = 0, emCurso = null, fila = null, ultimo = null, esqueleto = true;
 function montarPedido() {
   const par = parciais(), nat = nacionalAtual(par);
@@ -280,7 +280,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && mo
 
 // ----------------------------------------------------------------------------- início
 (async function inicio() {
-  const est = await (await fetch("estados.json", { cache: "no-cache" })).json();
+  const est = await (await fetch("estados.json?v=20261025b", { cache: "no-cache" })).json();
   ESTADOS = est.map((r) => ({ uf: r.uf, base: r.base26, Vesp: r.validos26_2t_esp, ap1752: r.apurado_17h52_1t26, secoes: r.validos26_2t_esp }));
   montarControles();
   marcarEsqueleto(true);
