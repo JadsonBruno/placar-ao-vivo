@@ -74,7 +74,7 @@ function calcular() {
 }
 function enviar(ped) {
   emCurso = ped;
-  $("#calc").hidden = false;
+  $("#calc").classList.add("on");
   if (worker) worker.postMessage(ped.msg);
   else setTimeout(() => { // navegador sem Worker de módulo: calcula aqui mesmo, sem travar o toque que pediu
     const m = ped.msg; const r = projetar(m.estados, m.nacionalSo || m.parciais, m.alvo);
@@ -86,7 +86,7 @@ function receber(d) {
   emCurso = null;
   if (d.erro) { ultimoErro = "cálculo: " + d.erro; }
   else if (ped && d.id === ped.msg.id) { ultimo = { ...ped, r: d.r, def: d.def }; esqueleto = false; desenharResultado(); }
-  if (fila) { const p = fila; fila = null; enviar(p); } else $("#calc").hidden = true;
+  if (fila) { const p = fila; fila = null; enviar(p); } else $("#calc").classList.remove("on");
 }
 if (worker) { worker.onmessage = (e) => receber(e.data); worker.onerror = () => { worker = null; if (emCurso) { const p = emCurso; emCurso = null; enviar(p); } }; }
 
