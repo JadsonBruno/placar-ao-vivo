@@ -383,6 +383,6 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && mo
   marcarEsqueleto(true);
   try { const el = await descobrirEleicao(); cd = el.cd; } catch { /* fica com 6258, confirmado em 24/10 */ }
   hist = store.get("pv-hist-" + cd, []);
-  $("#versao").textContent = `Eleição TSE ${cd}. Página estática: o seu navegador consulta o TSE diretamente; o cálculo roda em segundo plano. Motor ${MOTOR}${MOTOR === 2 ? " (regiões, votos de outros candidatos e comparecimento por região)" : ""}.`;
+  $("#versao").textContent = `Eleição TSE ${cd}. Página estática: o seu navegador consulta o TSE diretamente; o cálculo roda em segundo plano. Motor ${MOTOR}${MOTOR === 2 ? " (regiões, comparecimento por região, exterior isolado e cautela com parciais pequenas)" : ""}.`;
   if (new URLSearchParams(location.search).has("simulado")) simular(); else aoVivo();
 })();
