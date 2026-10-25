@@ -107,3 +107,4 @@ input,select{font:inherit;font-size:16px;background:#0b1224;color:var(--text);bo
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 .cen{display:grid;gap:4px;font-size:13px;color:var(--muted);margin:8px 0}
 @media (max-width:560px){.favtxt{min-height:2.4em}}
+#secoes{font-size:22px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.2}#secoes .sub2{font-size:13px;font-weight:600;color:var(--muted)}
