@@ -76,3 +76,18 @@ Prazo: tudo testado antes das 17h (Brasília) de 25/10. A votação vai das 8h �
 - A retomada automática rodou às 00h22 e não mudou nada.
 - Para atualizar a página: editar src/ ou docs/, rodar `node scripts/montar-web.mjs` e, no WSL, `git commit` + `git push`.
 - Opcional, não feito: servidor local gravador (item 4).
+
+## 25/10, ~15h30: estado para retomar
+
+- **Página no ar:** motor 1 (padrão). O motor 2 só aparece com `?motor=2`.
+- **Simulador (fase 1, publicado):**
+  - regiões, abstenção por região, limites históricos e 10 cenários espelhados;
+  - código e testes: `src/simulado.mjs` e `testes/simulador.mjs`.
+- **Motor 2:** `projetar2` em `src/motor.mjs` (`PARAMS_M2`), com efeito regional, σr aprendido entre 0, 0,75 e 1,5, e comparecimento por região.
+  - τ e a mistura 50/50 dos votos de outros existem no código, mas ficam desligados: pioraram 2014 e 2018.
+- **Regra de adoção:** escrita em `FASE2-PLANO.md` (rodada 2). Resultados em `testes/rodada2.md` e `testes/resultados-motor2.md`.
+- **Conclusão até agora:** nas eleições reais, o motor 2 empata ou fica um pouco pior em CRPS; no simulador, fica bem melhor. O padrão continua o motor 1.
+- **Para rodar:**
+  - `node testes/rodada2.mjs` (cerca de 7 min);
+  - `MOTOR=2 node testes/validacao.mjs`;
+  - `REPS=60 REPS_SIM=1 VARIANTE='{...}' node testes/rodada2.mjs` para testar peças isoladas.

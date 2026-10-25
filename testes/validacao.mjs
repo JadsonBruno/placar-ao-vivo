@@ -3,14 +3,14 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { projetar, PARAMS, PARAMS2, delta, rotulo } from "../src/motor.mjs";
+import { projetar, PARAMS, PARAMS_M2, delta, rotulo } from "../src/motor.mjs";
 import { apuracao, LINHA_1T26, gNacional, rng } from "../src/simulado.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 if (process.env.SB) PARAMS.sigmaB = Number(process.env.SB);
 // MOTOR=2: roda tudo com o efeito de região (fase 2) e grava testes/resultados-motor2.md
 const M2 = process.env.MOTOR === "2";
-if (M2) Object.assign(PARAMS, PARAMS2);
+if (M2) Object.assign(PARAMS, PARAMS_M2);
 const est = JSON.parse(readFileSync(join(ROOT, "dados/estados.json"), "utf8"));
 const out = [];
 const log = (s = "") => { console.log(s); out.push(s); };
@@ -33,7 +33,7 @@ ok(Math.abs(baseNat - 48.726) < 0.0005, `média nacional da base ponderada pelos
 const truth1T = (100 * sum("lula26_1t")) / (sum("lula26_1t") + sum("flavio26_1t"));
 // no 1º turno há outros candidatos: o peso de cada estado são os votos dos DOIS (no 2º turno isso é igual aos válidos)
 const V2c = (r) => r.lula26_1t + r.flavio26_1t;
-const est1T = est.map((r) => ({ uf: r.uf, regiao: r.regiao, base: (100 * r.lula22_1t) / (r.lula22_1t + r.bolso22_1t), Vesp: V2c(r) }));
+const est1T = est.map((r) => ({ uf: r.uf, regiao: r.regiao, outros: 1 - (r.lula22_1t + r.bolso22_1t) / r.validos22_1t, base: (100 * r.lula22_1t) / (r.lula22_1t + r.bolso22_1t), Vesp: V2c(r) }));
 // alvo do teste: as pesquisas do 1º turno superestimaram a margem Lula − Flávio em 3,7 pontos (seção 7) ≈ +1,85 na fatia de 2 candidatos
 const alvo1T = { centro: truth1T + 1.85, meio90: 4.55 };
 const swingErr = est.map((r) => { const b = (100 * r.lula22_1t) / (r.lula22_1t + r.bolso22_1t); return r.base26 - b; });
@@ -135,7 +135,7 @@ log("Ressalva: a curva de 2022 foi medida nesses mesmos pontos, então ela sempr
 // ---------------------------------------------------------------- 6.5 simetria
 log("");
 log("## 6.5 Simetria");
-const est2 = est.map((r) => ({ uf: r.uf, regiao: r.regiao, base: r.base26, Vesp: r.validos26_2t_esp }));
+const est2 = est.map((r) => ({ uf: r.uf, regiao: r.regiao, outros: 1 - (r.lula26_1t + r.flavio26_1t) / r.validos26_1t, base: r.base26, Vesp: r.validos26_2t_esp }));
 const R = rng(7);
 let maxDiff = 0;
 for (let trial = 0; trial < 5; trial++) {

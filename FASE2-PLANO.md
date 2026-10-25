@@ -24,6 +24,27 @@
 
 **Leitura.** O motor 2 acerta a faixa com bem mais frequência, no simulador e nas eleições reais, com faixas só 13% mais largas. O erro médio fica igual ou um pouco pior: +0,02 a +0,04 ponto, dentro do ruído de 60 apurações. Pelo critério combinado, **não troco o padrão hoje**. Quem quiser comparar abre a página com `?motor=2`.
 
+## Rodada 2 (25/10, 15h15): melhorias e regra de adoção, escritas antes de rodar
+
+**Melhorias no motor 2 (`projetar2`):**
+1. **Para onde vão os votos dos outros candidatos.** O ponto de partida do estado passa a ser `base·(1−o) + 50·o`, onde `o` é a fatia de outros candidatos no 1º turno. Um parâmetro τ, aprendido na apuração, diz se esses votos vão mais para um lado.
+   - O ajuste é centrado no nacional, então não mexe na previsão das pesquisas.
+   - A conta continua exata, porque τ é integrado junto com os efeitos de região.
+2. **σr aprendido na noite.** O motor considera três tamanhos de efeito regional (0; 0,75; 1,5) e pondera cada um pelo que a apuração mostra.
+3. **Comparecimento por região.** A razão entre votos válidos contados e esperados nos estados já apurados corrige o esperado dos vizinhos que ainda não contaram, com encolhimento quando há poucos dados.
+4. **Agrupamentos que não sejam as regiões do IBGE:** não faço. Com só 3 eleições, o risco de ajustar ao passado é maior que o ganho.
+
+**Avaliação.**
+- **Nota principal:** CRPS (aproximado por 19 quantis), comparado aos pares: os dois motores rodam nas mesmas apurações.
+- **Volume:** 200 apurações por ano real e 40 por cenário do simulador, nos 4 momentos de sempre.
+
+**Regra para virar padrão (todas precisam passar):**
+- **(a)** Nas eleições reais, o CRPS médio do motor 2 é menor que o do atual em pelo menos 2 dos 3 anos. Em nenhum ano ele é pior com significância, ou seja, com a diferença maior que 2 erros-padrão.
+- **(b)** A faixa de 80% acerta ≥ 72% nas eleições reais em cada ano, e entre 72% e 90% no simulador.
+- **(c)** Os testes antigos (V1) passam, e o acerto por estado às 17h52 do 1º turno de 2026 (V5) não piora.
+- **(d)** O tempo de cálculo fica no máximo 2× o atual no Node.
+- **(e)** Tudo pronto até as 16h30. Se não estiver, fica só em `?motor=2`.
+
 ---
 
 # Plano original
@@ -82,3 +103,22 @@ não sabem nada do modelo.
 4. Só troco o padrão se **todos** os critérios passarem. A troca é um commit (com nova versão `?v=`) e reverter é o mesmo commit ao contrário.
 5. **Horário:** a apuração começa às 17h. Se a validação não fechar até as 16h30, o motor atual fica para esta noite e
    o novo entra só como `?motor=2`. Não troco o motor no meio da apuração.
+
+## Resultado da rodada 2 (15h31)
+
+**Teste peça por peça** (60 apurações por ano):
+- **Mistura 50/50 dos votos de outros:** pior em 2014 (CRPS 0,47 → 1,23). Os eleitores de Marina não se dividiram ao meio.
+- **τ:** pior em 2018 (0,67 → 0,78).
+- As duas peças ficam desligadas.
+
+**Configuração final do motor 2:** efeito regional com σr aprendido (0, 0,75 e 1,5) e comparecimento por região.
+
+| Ano | CRPS motor 1 | CRPS motor 2 | Diferença |
+|---|---|---|---|
+| 2014 | 0,479 | 0,546 | +0,067 ± 0,016 |
+| 2018 | 0,636 | 0,633 | −0,003 ± 0,022 |
+| 2022 | 0,353 | 0,366 | +0,012 ± 0,006 |
+
+- **Simulador:** CRPS 0,608 → 0,493, e a faixa de 80% acerta 59% → 77%.
+- **Regra de adoção:** falha (a); passam (b), (c) e (d). **O motor 1 continua como padrão.**
+- **Leitura:** nas eleições reais, o motor 1 já cobria bem (85–89% na faixa de 80% em 2014 e 2022), e alargar a faixa custa CRPS. O ganho do motor 2 aparece no simulador, que sorteia desvios por estado cerca de 2× maiores que os de 2022. O motor 2 serve de segunda opinião em `?motor=2`, para uma noite com surpresa regional.
