@@ -97,3 +97,11 @@ Prazo: tudo testado antes das 17h (Brasília) de 25/10. A votação vai das 8h �
 - Motor 2 ganhou: exterior isolado (apura por fuso) e ruído de parcial com poucos votos (σsec 80, expoente 2), calibrados no 1º turno de 2022 (`testes/calibrar-ruido.mjs`) e testados no 2º.
 - 2º turno de 2022, previsão de partida 52: erro médio 0,46 (motor 1) → 0,23; maior erro antes de 30% apurado 3,6 → 1,1.
 - `?motor=1` volta ao motor anterior.
+
+## 25/10, ~22h45: depois da apuração
+- Resultado oficial: Lula 51,785% × Flávio 48,215% (100%).
+- Motor 2: σb 2 → 3, escolhido nas três apurações reais (`testes/noites-reais.mjs`). Menos confiança no começo e faixa menos justa no fim.
+- Reprise na página (Ferramentas): `scripts/montar-reprise-2026-2t.mjs`.
+  - Oficial: o total nacional de cada minuto, gravado da página, e o final por estado.
+  - Estimado: o caminho de cada estado, pelo boletim de urna do 1º turno de 2026.
+- **Pendente:** quando o TSE publicar `bweb_2t_*` de 2026 (cerca de 2 dias), rodar `montar-parciais-bu.mjs` com ele e refazer a reprise com a apuração oficial estado a estado.

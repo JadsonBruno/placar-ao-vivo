@@ -13,7 +13,13 @@ const [pasta, nome, rival = "22", dia] = process.argv.slice(2);
 const PASSO = 5, FIM = 600; // minutos depois das 17h00 de Brasília, de 5 em 5, até 03h00
 const [d0, m0, a0] = dia.split("/").map(Number);
 const inicio = Date.UTC(a0, m0 - 1, d0, 17 + 3, 0, 0); // 17h00 BRT = 20h00 UTC
-const minuto = (s) => { const m = /(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})/.exec(s); return m ? (Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4] + 3, +m[5], +m[6]) - inicio) / 60000 : null; };
+// aceita "dd/mm/aaaa hh:mm:ss" (até 2022) e "aaaa-mm-dd hh:mm:ss" (2026)
+const minuto = (s) => {
+  let m = /(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})/.exec(s), d;
+  if (m) d = [+m[3], +m[2], +m[1], +m[4], +m[5], +m[6]];
+  else if ((m = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(s))) d = m.slice(1).map(Number);
+  return d ? (Date.UTC(d[0], d[1] - 1, d[2], d[3] + 3, d[4], d[5]) - inicio) / 60000 : null;
+};
 
 async function lerUF(zip) {
   const secoes = new Map(); // seção -> { t, A, B }

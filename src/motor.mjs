@@ -171,6 +171,9 @@ export const PARAMS_M2 = {
   ...PARAMS, versao: 2, sigmaT: 0, misturaOutros: false, sigmaRs: [0, 0.75, 1.5], encolheComp: 0.3,
   // exterior isolado e ruído de parcial com poucos votos: calibrados no 1º turno de 2022, testados no 2º (testes/parciais-reais.md)
   isolados: ["ZZ"], sigmaSec: 80, expSec: 2,
+  // σb 3 (era 2): melhor nas três apurações reais (2022 2º turno, 2026 1º e 2º turnos): menos confiança cedo e faixa
+  // menos justa no fim, com o mesmo erro médio (testes/noites-reais.md)
+  sigmaB: 3,
   grid: { sHalf: 18, bHalf: 10, coarse: [73, 21], fine: [91, 25] },
 };
 

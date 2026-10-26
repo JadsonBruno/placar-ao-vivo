@@ -1,8 +1,8 @@
 // Placar ao Vivo: busca o TSE direto do navegador; o motor roda num Web Worker (calculo.js),
 // então a tela e os botões respondem na hora, e os números mostram um "esqueleto" enquanto o cálculo não chega.
-import { projetar, PARAMS, PARAMS_M2, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025l";
-import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025l";
-import { apuracao, cenario, CENARIOS, rng } from "./simulado.js?v=20261025l";
+import { projetar, PARAMS, PARAMS_M2, rotulo, definido, delta, CURVAS } from "./motor.js?v=20261025m";
+import { lerArquivo, urlUF, UFS, descobrirEleicao } from "./tse.js?v=20261025m";
+import { apuracao, cenario, CENARIOS, rng } from "./simulado.js?v=20261025m";
 
 const $ = (s) => document.querySelector(s);
 const NOME = { A: "Lula", B: "Flávio Bolsonaro" };
@@ -76,7 +76,7 @@ function nacionalAtual(par) {
 const MOTOR_PADRAO = 2;
 const MOTOR = { 1: 1, 2: 2 }[new URLSearchParams(location.search).get("motor")] ?? MOTOR_PADRAO;
 let worker = null;
-try { worker = new Worker(new URL("./calculo.js?v=20261025l", import.meta.url), { type: "module" }); } catch { worker = null; }
+try { worker = new Worker(new URL("./calculo.js?v=20261025m", import.meta.url), { type: "module" }); } catch { worker = null; }
 let pedidoId = 0, emCurso = null, fila = null, ultimo = null;
 function montarPedido() {
   const par = parciais(), nat = nacionalAtual(par);
@@ -122,7 +122,7 @@ const hhmmss = (d) => d.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Pau
 function horaRelativa() {
   const el = $("#horaRel");
   const g = instanteTSE(br?.gerado);
-  if (modo === "sim") { el.textContent = "simulação: sem horário do TSE"; el.className = ""; }
+  if (modo === "sim") { el.textContent = simCen?.reprise ? `reprise: TSE às ${simCen.hora || "—"}` : "simulação: sem horário do TSE"; el.className = ""; }
   else if (ultimoErro && horaErro && (!ultimoOk || horaErro > ultimoOk)) { el.textContent = `⚠ falha ao consultar o TSE às ${hhmmss(horaErro)}; tentando de novo`; el.className = "falha"; }
   else {
     el.className = "";
@@ -143,8 +143,8 @@ function desenharStatus(nat) {
   const falhaGeral = ultimoErro && !ultimoOk;
   const modoEl = $("#modo");
   modoEl.className = "pill " + (modo === "sim" ? "sim" : nManual ? "manual" : falhaGeral ? "erro" : "vivo");
-  modoEl.textContent = modo === "sim" ? "SIMULAÇÃO" : nManual ? "manual + TSE" : falhaGeral ? "TSE fora" : "TSE ao vivo";
-  $("#statusTxt").textContent = modo === "sim" ? "Apuração simulada (números inventados)" : nat.f === 0 ? "A apuração ainda não começou (a votação vai até 17h de Brasília)" : nat.f >= 1 ? "Apuração encerrada no TSE" : "Apuração em andamento";
+  modoEl.textContent = modo === "sim" ? (simCen?.reprise ? "REPRISE" : "SIMULAÇÃO") : nManual ? "manual + TSE" : falhaGeral ? "TSE fora" : "TSE ao vivo";
+  $("#statusTxt").textContent = modo === "sim" ? (simCen?.reprise ? "Reprise de 25/10/2026 (acelerada)" : "Apuração simulada (números inventados)") : nat.f === 0 ? "A apuração ainda não começou (a votação vai até 17h de Brasília)" : nat.f >= 1 ? "Apuração encerrada no TSE" : "Apuração em andamento";
   $("#mLista").textContent = nManual ? "Valendo agora: " + Object.entries(manual).map(([k, m]) => `${k} ${fmt(100 * m.f, 1)}% (${fmtInt(m.A)} × ${fmtInt(m.B)})`).join("; ") : "";
   horaRelativa();
 }
@@ -196,7 +196,8 @@ function desenharResultado() {
   const grandes = ["SP", "MG", "RJ", "BA", "RS", "PR", "PE", "CE"].filter((uf) => (par[uf]?.f || 0) < 0.2);
   if (nat.f > 0 && grandes.length) av.push(`Estados grandes ainda abaixo de 20% apurado: ${grandes.join(", ")}.`);
   if (def) av.push(`Definido matematicamente: a diferença já contada é maior que todos os eleitores que ainda faltam totalizar. O resultado oficial é o do TSE.`);
-  if (modo === "sim") av.push(`SIMULAÇÃO: nada nesta tela é resultado real. Cenário: ${simCen ? simCen.nome : "—"}. ${simCen?.fim ? `Resultado sorteado: Lula ${fmt(simCen.nacional, 1)}% · Flávio ${fmt(100 - simCen.nacional, 1)}%.` : "O resultado sorteado aparece quando a apuração simulada terminar."}`);
+  if (modo === "sim" && simCen?.reprise) av.push(`REPRISE da apuração do 2º turno de 25/10/2026, acelerada. Oficiais do TSE: o total nacional de cada minuto e o resultado final de cada estado; o caminho de cada estado ao longo da noite é estimado pelo boletim de urna do 1º turno. ${simCen.fim ? `Resultado oficial: Lula ${fmt(simCen.nacional, 2)}% · Flávio ${fmt(100 - simCen.nacional, 2)}%.` : "O resultado oficial aparece no fim."}`);
+  else if (modo === "sim") av.push(`SIMULAÇÃO: nada nesta tela é resultado real. Cenário: ${simCen ? simCen.nome : "—"}. ${simCen?.fim ? `Resultado sorteado: Lula ${fmt(simCen.nacional, 1)}% · Flávio ${fmt(100 - simCen.nacional, 1)}%.` : "O resultado sorteado aparece quando a apuração simulada terminar."}`);
   if (nManual) av.push(`Há ${nManual} entrada(s) manual(is) substituindo o TSE.`);
   $("#avisos").hidden = !av.length;
   $("#avisos").innerHTML = av.map((t) => `<p>⚠ ${t}</p>`).join("");
@@ -305,11 +306,12 @@ async function proximo() {
 }
 
 // ----------------------------------------------------------------------------- simulação (demonstração)
-let simTimer = 0, simCen = null, HIST = null;
+let simTimer = 0, simCen = null, HIST = null, REPRISE = null, geracao = 0; // geracao: só a simulação mais nova anda
 async function simular() {
   modo = "sim"; clearTimeout(timer); clearTimeout(simTimer);
+  const g = ++geracao;
   hist = []; marcarEsqueleto(true);
-  HIST ??= await (await fetch("historico.json?v=20261025l")).json();
+  HIST ??= await (await fetch("historico.json?v=20261025m")).json();
   const R = rng(Date.now() % 100000);
   // resultado final por estado: regiões, abstenção e limites históricos (simulado.js); a apuração anda por cima dele
   simCen = cenario(ESTADOS, HIST, R, { centro: alvo().centro, id: $("#cenario").value });
@@ -317,7 +319,7 @@ async function simular() {
   const sim = apuracao(estados, { b: R.n() * 2 });
   let min = 0;
   const passo = () => {
-    if (modo !== "sim") return;
+    if (modo !== "sim" || g !== geracao) return;
     const q = sim(min);
     for (const e of ESTADOS) tse[e.uf] = { ...q[e.uf] };
     br = null;
@@ -325,6 +327,32 @@ async function simular() {
     calcular();
     min += 4;
     if (min <= 380) simTimer = setTimeout(passo, 700);
+  };
+  passo();
+  rolarPara(null);
+}
+// reprise da noite de 25/10/2026: quadros montados por scripts/montar-reprise-2026-2t.mjs (nacional e final oficiais)
+async function reprise() {
+  modo = "sim"; clearTimeout(timer); clearTimeout(simTimer);
+  const g = ++geracao;
+  hist = []; marcarEsqueleto(true);
+  REPRISE ??= await (await fetch("reprise-2026-2t.json?v=20261025m")).json();
+  const fin = (100 * REPRISE.final.A) / (REPRISE.final.A + REPRISE.final.B);
+  simCen = { reprise: true, nome: "Reprise de 25/10/2026", nacional: fin, fim: false, hora: "" };
+  let i = 0;
+  const passo = () => {
+    if (modo !== "sim" || g !== geracao) return;
+    const fr = REPRISE.quadros[i];
+    for (const e of ESTADOS) {
+      const [f, A, B] = fr.q[e.uf] || [0, 0, 0], vv = A + B;
+      tse[e.uf] = { f, A, B, vv, p: vv ? (100 * A) / vv : null, restantes: Math.round(((1 - f) * (f > 0 ? vv / f : e.Vesp)) / 0.75) };
+    }
+    br = null;
+    const m = 17 * 60 + Math.round(fr.t / 60);
+    simCen.hora = `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+    if (i === REPRISE.quadros.length - 1) simCen.fim = true;
+    calcular();
+    if (++i < REPRISE.quadros.length) simTimer = setTimeout(passo, 500);
   };
   passo();
   rolarPara(null);
@@ -367,6 +395,7 @@ document.addEventListener("click", (e) => {
   if (b.id === "horaBtn") { const ab = b.getAttribute("aria-expanded") !== "true"; b.setAttribute("aria-expanded", String(ab)); $("#horaDet").hidden = !ab; }
   if (b.id === "demo") { b.textContent = "Simulando…"; setTimeout(() => (b.textContent = "Simular de novo"), 1200); simular(); }
   if (b.id === "vivo") aoVivo();
+  if (b.id === "reprise") { b.textContent = "Carregando…"; setTimeout(() => (b.textContent = "Ver a reprise de novo"), 1200); reprise(); }
   if (b.id === "mSalvar") {
     const uf = $("#mUF").value, f = Number($("#mF").value) / 100, A = Number($("#mA").value), B = Number($("#mB").value);
     if (["#mF", "#mA", "#mB"].some((id) => $(id).value.trim() === "") || !valida({ f, A, B })) { $("#mLista").textContent = "Preencha % de seções (maior que 0) e os votos dos dois candidatos."; return; }
@@ -379,7 +408,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && mo
 
 // ----------------------------------------------------------------------------- início
 (async function inicio() {
-  const est = await (await fetch("estados.json?v=20261025l", { cache: "no-cache" })).json();
+  const est = await (await fetch("estados.json?v=20261025m", { cache: "no-cache" })).json();
   ESTADOS = est.map((r) => ({ uf: r.uf, regiao: r.regiao, outros: 1 - (r.lula26_1t + r.flavio26_1t) / r.validos26_1t, base: r.base26, Vesp: r.validos26_2t_esp, ap1752: r.apurado_17h52_1t26, secoes: r.validos26_2t_esp }));
   montarControles();
   marcarEsqueleto(true);
